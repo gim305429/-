@@ -195,9 +195,12 @@ body.mobile #killfeed { top:8px; right:8px; transform:scale(0.78); transform-ori
 body.mobile #bottomleft { left:auto; right:auto; top:114px; bottom:auto; left:10px; width:150px; }
 body.mobile #lives { font-size:12px; } body.mobile #hpnum { font-size:26px; } body.mobile #hpbar { height:6px; } body.mobile #charname { display:none; }
 body.mobile #buffs { left:10px; bottom:auto; top:186px; }
-body.mobile #abilities { left:auto; right:220px; bottom:96px; transform:none; gap:8px; }
-body.mobile .ab { width:62px; height:58px; border-radius:12px; } body.mobile .ab.ult { width:68px; }
-body.mobile .ab .nm { display:none; } body.mobile .ab .key { margin-top:8px; font-size:20px; }
+body.mobile #abilities { left:50%; right:auto; bottom:12px; transform:translateX(-50%); gap:6px; }
+body.mobile .ab { width:54px; height:46px; border-radius:10px; } body.mobile .ab.ult { width:60px; }
+body.mobile .ab .nm { display:none; } body.mobile .ab .key { margin-top:4px; font-size:17px; } body.mobile .ab .cdt { font-size:11px; }
+body.mobile #killfeed .kf:nth-child(n+4) { display:none; }
+body.mobile #tRevive { bottom:74px; }
+body.mobile #scoreboard { transform:translate(-50%,-50%) scale(var(--s, 1)); }
 body.mobile #bottomright { right:34px; bottom:192px; } body.mobile #weapons { display:none; }
 body.mobile #ammo b { font-size:26px; } body.mobile #ammo span { font-size:12px; }
 body.mobile #announce { top:18%; } body.mobile .ann { font-size:16px; }
@@ -2879,6 +2882,7 @@ function updateViewmodel(dt) {
   const P = G.player; const g = VM.cur; if (!g) return;
   const show = P.alive && !P.car && !P.typing;
   VM.root.visible = show;
+  VM.root.scale.setScalar(TOUCH.on ? 0.7 : 1); VM.root.position.set(TOUCH.on ? 0.07 : 0, TOUCH.on ? -0.025 : 0, 0);
   if (!show) return;
   const hs = Math.hypot(P.vel.x, P.vel.z);
   VM.bobT += dt * hs * 1.6;
@@ -2976,9 +2980,23 @@ function updateCamera(dt) {
 // ================= mobile touch controls =================
 const TOUCH = { on: false, move: { x: 0, y: 0 }, joyId: null, lookId: null, lx: 0, ly: 0, revive: false, fireId: null, sens: 0.0048 };
 function isTouchDevice() { return (window.matchMedia && matchMedia('(pointer: coarse)').matches) || 'ontouchstart' in window; }
+// phone mode: lay the HUD out in a virtual ~960x440 space and scale it down to the real screen
+function layoutPhone() {
+  const on = TOUCH.on;
+  const S = on ? clamp(Math.min(window.innerWidth / 960, window.innerHeight / 440), 0.42, 1) : 1;
+  document.body.style.setProperty('--s', S);
+  for (const el of [UI.hud, $('#touch')]) {
+    if (!el) continue;
+    if (on && S < 1) Object.assign(el.style, { transform: `scale(${S})`, transformOrigin: '0 0', inset: 'auto', left: '0', top: '0', width: `${window.innerWidth / S}px`, height: `${window.innerHeight / S}px` });
+    else Object.assign(el.style, { transform: '', transformOrigin: '', inset: '', left: '', top: '', width: '', height: '' });
+  }
+}
+window.addEventListener('resize', () => layoutPhone());
+window.addEventListener('orientationchange', () => setTimeout(layoutPhone, 200));
 function setTouchMode(on) {
   TOUCH.on = on;
   document.body.classList.toggle('mobile', on);
+  layoutPhone();
   if (on) { INPUT.noLock = true; renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25)); }
   OUT_U.value = on ? 1.35 : 1;
   const t = $('#touchtoggle'); if (t) t.classList.toggle('on', on);
@@ -3359,7 +3377,7 @@ function updateHUD(dt) {
     const d = DMGN[i]; d.t -= dt; d.pos.y += dt * 0.8;
     const p = d.pos.clone().project(camera);
     if (d.t <= 0 || p.z > 1) { d.el.remove(); DMGN.splice(i, 1); continue; }
-    d.el.style.transform = `translate(${((p.x + 1) / 2) * innerWidth}px, ${((1 - p.y) / 2) * innerHeight}px) translate(-50%,-50%)`;
+    d.el.style.transform = `translate(${((p.x + 1) / 2) * UI.hud.clientWidth}px, ${((1 - p.y) / 2) * UI.hud.clientHeight}px) translate(-50%,-50%)`;
     d.el.style.opacity = Math.min(1, d.t * 2.5);
   }
   for (let i = DMGIND.length - 1; i >= 0; i--) {
