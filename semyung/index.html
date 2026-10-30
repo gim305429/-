@@ -111,6 +111,29 @@ tr.sep td { font-weight:900; font-size:12px; padding-top:12px; border-top:none; 
 tr.me td { background:rgba(255,255,255,0.07); }
 #pause { z-index:28; position:fixed; inset:0; background:rgba(8,10,14,0.6); display:flex; align-items:center; justify-content:center; flex-direction:column; gap:10px; cursor:pointer; pointer-events:auto; }
 #pause .big { font-size:30px; font-weight:900; } #pause .sub { color:#aab2bf; font-size:14px; }
+#pause .pbtns { display:flex; gap:10px; margin-top:8px; }
+/* training range */
+#trainpanel { position:absolute; top:184px; left:12px; width:240px; pointer-events:auto; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:13px; display:none; }
+body.training #trainpanel { display:block; } body.training #teambar { display:none; }
+#trainpanel .tt { font-weight:900; font-size:15px; color:#7dfcb6; margin-bottom:6px; }
+#trainpanel .meter { display:grid; grid-template-columns:1fr auto; gap:2px 10px; margin-bottom:8px; }
+#trainpanel .meter b { font-size:15px; text-align:right; }
+#trainpanel .tbtns { display:grid; grid-template-columns:1fr 1fr; gap:5px; }
+#trainpanel button { font:inherit; font-size:12px; font-weight:700; color:#fff; background:rgba(255,255,255,0.1); border:1px solid var(--line); border-radius:5px; padding:6px 4px; cursor:pointer; }
+#trainpanel button.on { color:#7dfcb6; border-color:#7dfcb6; background:rgba(125,252,182,0.12); }
+#trainpanel button kbd { font-size:10px; opacity:0.6; margin-left:3px; }
+#trainpanel .tip { color:#aab2bf; font-size:11px; margin-top:7px; line-height:1.4; }
+.go.alt { background:#2f7a5a; margin-right:10px; }
+body.mobile #trainpanel { top:6px; left:50%; transform:translateX(-50%); width:auto; max-width:calc(100vw - 340px); padding:5px 7px; font-size:10px; display:none; }
+body.mobile.training #trainpanel { display:flex; gap:8px; align-items:center; }
+body.mobile #trainpanel .tt, body.mobile #trainpanel .tip, body.mobile #trainpanel kbd { display:none; }
+body.mobile #trainpanel .meter { margin:0; grid-template-columns:auto auto; gap:0 5px; white-space:nowrap; }
+body.mobile #trainpanel .meter b { font-size:11px; }
+body.mobile #trainpanel .meter span:nth-of-type(4), body.mobile #trainpanel .meter b:nth-of-type(4) { display:none; }
+body.mobile #trainpanel .tbtns { grid-template-columns:repeat(4, auto); gap:3px; }
+body.mobile #trainpanel button { font-size:10px; padding:4px 5px; white-space:nowrap; }
+body.mobile #trainpanel button[data-tr=quit] { grid-column:auto !important; }
+body.mobile.training #announce { top:30%; }
 /* menu */
 #menu, #end { z-index:40; position:fixed; inset:0; overflow-y:auto; background:linear-gradient(180deg, rgba(10,12,18,0.82), rgba(10,12,18,0.94)); }
 .menuin { max-width:1180px; margin:0 auto; padding:34px 28px 40px; }
@@ -224,10 +247,24 @@ body.mobile #typing .note { width:min(420px, 92vw); } body.mobile #typing .name 
   <div id="centerinfo"></div>
   <div id="progress"><div class="lbl"></div><div class="bar"><div></div></div></div>
   <div id="buffs"></div>
-  <div id="bottomleft"><div id="lives"></div><div id="hpnum">100</div><div id="hpbar"><div></div></div><div id="charname"></div></div>
+  <div id="bottomleft"><div id="lives"></div><div id="hpnum">150</div><div id="hpbar"><div></div></div><div id="charname"></div></div>
   <div id="abilities"></div>
   <div id="bottomright"><div id="weapons"></div><div id="ammo"></div></div>
   <div id="dmgnums"></div>
+  <div id="trainpanel">
+    <div class="tt">🎯 훈련장</div>
+    <div class="meter"><span>최근 3초 피해</span><b id="trDps">0</b><span>마지막 한 방</span><b id="trLast">-</b><span>최대 한 방</span><b id="trMax">-</b><span>처치한 더미</span><b id="trKills">0</b></div>
+    <div class="tbtns">
+      <button data-tr="ult">궁 충전<kbd>U</kbd></button>
+      <button data-tr="cd">쿨타임 없음<kbd>K</kbd></button>
+      <button data-tr="move">더미 이동<kbd>M</kbd></button>
+      <button data-tr="principal">교장 소환<kbd>P</kbd></button>
+      <button data-tr="heal">체력 회복<kbd>H</kbd></button>
+      <button data-tr="reset">기록 초기화<kbd>J</kbd></button>
+      <button data-tr="quit" style="grid-column:1 / -1">나가기</button>
+    </div>
+    <div class="tip">목숨 무한 · 더미는 쏘지 않아요 · Esc → 메뉴로 나가기</div>
+  </div>
 </div>
 <div id="touch">
   <div id="lookpad"></div>
@@ -242,7 +279,7 @@ body.mobile #typing .note { width:min(420px, 92vw); } body.mobile #typing .name 
 <div id="rotate">휴대폰을 가로로 돌려 주세요</div>
 <div id="typing" class="hidden"><div class="note"><div class="title">노트 필기 · 이 이름을 그대로 입력!</div><div class="name"></div><input id="typeinput" autocomplete="off" spellcheck="false" placeholder="여기에 입력"><div class="tbar"><div></div></div><div class="hint">맞게 치면 바로 발동 · Esc 포기</div></div></div>
 <div id="scoreboard" class="hidden"></div>
-<div id="pause" class="hidden"><div class="big">일시정지</div><div class="sub">클릭해서 계속하기</div></div>
+<div id="pause" class="hidden"><div class="big">일시정지</div><div class="sub">클릭해서 계속하기</div><div class="pbtns"><button class="nb" id="quitbtn">메뉴로 나가기</button></div></div>
 <div id="menu">
   <div class="menuin">
     <div class="brand">
@@ -261,7 +298,7 @@ body.mobile #typing .note { width:min(420px, 92vw); } body.mobile #typing .name 
     </div>
     <div class="rules">
       <div class="rule"><b>3 vs 3 팀전</b>혼자면 봇과, 방을 만들면 친구와 최대 6명. 빈자리는 봇이 채워요.</div>
-      <div class="rule"><b>목숨 3개</b>죽으면 8초 뒤 부활. 세 번 죽으면 탈락하고 관전.</div>
+      <div class="rule"><b>체력 150 · 목숨 3개</b>죽으면 8초 뒤 부활. 세 번 죽으면 탈락하고 관전.</div>
       <div class="rule"><b>기절 · 부활</b>체력이 0이 되면 기절. 팀원이 옆에서 F를 4초 누르면 부활.</div>
       <div class="rule"><b>교장 (적대 NPC)</b>본관을 돌아다니며 팀 상관없이 공격. 처치하면 30초간 이속·공격력 버프.</div>
     </div>
@@ -269,7 +306,7 @@ body.mobile #typing .note { width:min(420px, 92vw); } body.mobile #typing .name 
     <div id="chargrid"></div>
     <div class="bottom">
       <div class="keys"><kbd>WASD</kbd> 이동 · <kbd>마우스</kbd> 조준 · <kbd>좌클릭</kbd> 사격 · <kbd>R</kbd> 재장전 · <kbd>Space</kbd> 점프 · <kbd>Shift</kbd> 걷기<br><kbd>Q</kbd> <kbd>E</kbd> 스킬 · <kbd>X</kbd> 궁극기 · <kbd>1</kbd>~<kbd>4</kbd> 무기 · <kbd>F</kbd> 부활(길게) · <kbd>C</kbd> 은신(송영진 궁) · <kbd>Tab</kbd> 점수판 · <kbd>Esc</kbd> 일시정지<br>휴대폰: 왼쪽 조이스틱 이동 · 오른쪽 화면 드래그로 시점 · 버튼으로 발사/점프/스킬</div>
-      <button class="go" id="startbtn">시작</button>
+      <div><button class="go alt" id="trainbtn" title="혼자 들어가서 스킬·무기·교장을 시험해 보는 모드">🎯 훈련장</button><button class="go" id="startbtn">시작</button></div>
     </div>
   </div>
 </div>
@@ -437,6 +474,9 @@ function sfx(kind, vol = 1, pos = null) {
     case 'revive': env(0.25, 0.5); tone('sine', 500, 1000, 0.5); break;
     case 'down': env(0.35, 0.5); tone('sine', 500, 150, 0.5); break;
     case 'chalk': env(0.15, 0.1); noise(0.1, 2500, 2); break;
+    case 'sweep': env(0.1, 0.22); noise(0.22, 3600, 0.9, 'bandpass', 1700); break;
+    case 'whoosh': env(0.28, 0.28); noise(0.28, 500, 1.4, 'bandpass', 2400); break;
+    case 'broom': env(0.55, 0.35); noise(0.35, 2000, 0.6, 'bandpass', 300); tone('square', 130, 50, 0.16, 0.5); break;
     case 'engine': env(0.18, 0.25); tone('sawtooth', 90 + Math.random() * 30, 140, 0.25, 0.6); break;
     case 'type': env(0.12, 0.04); noise(0.04, 3000, 3); break;
     case 'deny': env(0.25, 0.25); tone('square', 200, 120, 0.25, 0.4); break;
@@ -892,13 +932,34 @@ function buildStudent(look) {
   return { root, legs, arms, fores, torso, head, gun, muzzle, mats, reptile, kind: 'student' };
 }
 
+// straw broom (수수 빗자루). Origin = main grip point, handle runs along local Y, bristles at -Y.
+function buildBroom() {
+  const g = new THREE.Group(); g.name = 'Broom';
+  const M = (c, r = 0.8) => new THREE.MeshStandardMaterial({ color: c, roughness: r, flatShading: true });
+  const wood = M(0x9b6b3d, 0.65), straw = M(0xd8b65a, 0.95), straw2 = M(0xb8923e, 0.95), band = M(0xb2302a, 0.6);
+  const add = (geo, m, pos, rot, sc) => { const me = new THREE.Mesh(geo, m); me.position.set(...pos); if (rot) me.rotation.set(...rot); if (sc) me.scale.set(...sc); me.castShadow = true; g.add(me); return me; };
+  add(new THREE.CylinderGeometry(0.019, 0.022, 1.32, 7), wood, [0, -0.28, 0]);
+  add(new THREE.SphereGeometry(0.026, 6, 5), wood, [0, 0.38, 0]);
+  add(new THREE.CylinderGeometry(0.036, 0.042, 0.07, 8), band, [0, -0.9, 0]);
+  add(new THREE.CylinderGeometry(0.042, 0.05, 0.05, 8), band, [0, -0.99, 0]);
+  add(new THREE.CylinderGeometry(0.05, 0.17, 0.36, 10), straw, [0, -1.12, 0], null, [1, 1, 0.42]);
+  for (let i = 0; i < 5; i++) add(new THREE.ConeGeometry(0.03, 0.12, 4), straw2, [(i - 2) * 0.065, -1.33, 0], [Math.PI, 0, (i - 2) * 0.12], [1, 1, 0.6]);
+  const tip = new THREE.Object3D(); tip.position.set(0, -1.3, 0); g.add(tip);
+  return { g, tip };
+}
 function wrapPrincipal() {
   const root = buildPrincipalModel();
+  const body = root.getObjectByName('Body');
+  const broom = buildBroom();
+  const pivot = new THREE.Group(); pivot.name = 'BroomPivot'; pivot.rotation.order = 'YXZ';
+  pivot.add(broom.g); body.add(pivot);
   const mats = new Set();
   root.traverse((o) => { if (o.isMesh) mats.add(o.material); });
   const legs = [root.getObjectByName('Leg_R'), root.getObjectByName('Leg_L')];
   const arms = [root.getObjectByName('Arm_R'), root.getObjectByName('Arm_L')];
-  return { root, legs, arms, fores: [], torso: root.getObjectByName('Body'), head: root.getObjectByName('Head'), gun: null, muzzle: null, mats: [...mats], reptile: null, kind: 'principal' };
+  const fores = arms.map((a) => a.children.find((c) => c.isGroup));
+  return { root, legs, arms, fores, torso: body, head: root.getObjectByName('Head'), gun: null, muzzle: null, mats: [...mats], reptile: null, kind: 'principal',
+    broom: pivot, broomTip: broom.tip, sweepT: Math.random() * 6, dustT: 0, lastSweepSign: 1 };
 }
 
 // ================= F1 car =================
@@ -1295,9 +1356,9 @@ const CHARS = {
   jinwoo: {
     name: '강진우', role: '돌격', color: '#6fcf6a',
     look: { skin: 0xe9c6a5, hair: 0x2e2116, hairStyle: 'short', top: 0x2f5a3a, top2: 0x23452c, topStyle: 'hoodie', pants: 0x26282e, acc: 'headband', accColor: 0xe9e9e9, browAngle: 0.25 },
-    Q: { name: '탈피', cd: 20, desc: '허물을 벗어 즉시 체력 45 회복, 감속·기절·실명 해제' },
+    Q: { name: '탈피', cd: 20, desc: '허물을 벗어 즉시 체력 65 회복, 감속·기절·실명 해제' },
     E: { name: '꼬리 채찍', cd: 11, desc: '전방 3.5m 부채꼴 범위의 적에게 40 피해 + 밀쳐내기 + 감속' },
-    X: { name: '파충류 수인화', charge: 75, desc: '5초간 파충류 수인으로 변신: 최대 체력 +100, 이동속도 +40%, 공격력 +50%' },
+    X: { name: '파충류 수인화', charge: 75, desc: '5초간 파충류 수인으로 변신: 최대 체력 +150, 이동속도 +40%, 공격력 +50%' },
   },
   youngjin: {
     name: '송영진', role: '암살자', color: '#b18cff',
@@ -1309,7 +1370,7 @@ const CHARS = {
   minchan: {
     name: '김민찬', role: '파괴자', color: '#ff8a3d',
     look: { skin: 0xe6c3a2, hair: 0x18120e, hairStyle: 'short', top: 0xe8702a, top2: 0x26262b, topStyle: 'jacket', inner: 'dark', stripe: 0xffffff, pants: 0x2a2c34, acc: 'cap', accColor: 0x1f1f24 },
-    Q: { name: '에너지 드링크', cd: 18, desc: '5초간 이동속도 +35%, 체력 15 회복' },
+    Q: { name: '에너지 드링크', cd: 18, desc: '5초간 이동속도 +35%, 체력 25 회복' },
     E: { name: '타이어 굴리기', cd: 14, desc: '굴러가는 타이어를 던져 맞은 적에게 35 피해 + 2초 감속' },
     X: { name: 'F1 카', charge: 85, desc: '5초간 F1 머신 탑승. 벽을 부수며 질주하고, 들이받은 적은 50 피해 + 2초 기절' },
   },
@@ -1336,6 +1397,8 @@ const DIFF = {
   hard: { react: 0.32, err: 1.1, burst: 0.95, dmg: 0.85, label: '어려움' },
 };
 
+const BASE_HP = 150;       // player max HP (was 100) — longer fights
+const PRINCIPAL_HP = 2200;  // principal max HP (was 650)
 class Actor {
   constructor(o) {
     this.name = o.name; this.charId = o.charId; this.team = o.team;
@@ -1344,7 +1407,7 @@ class Actor {
     this.yaw = 0; this.pitch = 0; this.onGround = true;
     this.radius = this.isPrincipal ? 0.42 : 0.38;
     this.height = 1.75; this.eye = 1.6;
-    this.baseMaxHp = this.isPrincipal ? 650 : 100; this.maxHp = this.baseMaxHp; this.hp = this.maxHp;
+    this.baseMaxHp = this.isPrincipal ? PRINCIPAL_HP : BASE_HP; this.maxHp = this.baseMaxHp; this.hp = this.maxHp;
     this.state = 'alive'; this.lives = 3; this.downHp = 0; this.respawnT = 0;
     this.kills = 0; this.deaths = 0; this.knocks = 0; this.revives = 0;
     this.mag = { rifle: 25, pistol: 12 }; this.weapon = 'rifle'; this.fireCd = 0; this.reloadT = 0; this.triggerHeld = false; this.latch = false; this.spreadAdd = 0;
@@ -1433,6 +1496,7 @@ function damage(tgt, amount, src, o = {}) {
   amount *= tgt.stat('taken');
   amount = Math.max(1, Math.round(amount));
   tgt.lastHitBy = src; tgt.lastHitT = G.time;
+  if (G.training && src && src.isPlayer && tgt !== src) trainLog(amount);
   if (tgt.ai && src && src !== tgt) tgt.ai.attacker = src;
   if (tgt.typing && tgt.ai) {}
   let killed = false, knocked = false;
@@ -1477,7 +1541,8 @@ function checkTeamWipe(team) {
 function killActor(a, src) {
   if (a.state === 'dead' || a.state === 'out') return;
   endCar(a);
-  a.state = 'dead'; a.lives--; a.deaths++; a.hp = 0; a.downHp = 0; a.respawnT = 8;
+  a.state = 'dead'; a.lives--; a.deaths++; a.hp = 0; a.downHp = 0; a.respawnT = a.dummy ? 3 : G.training ? 3 : 8;
+  if (G.training && a.dummy && src && src.isPlayer) TRAIN.kills++;
   a.buffs.length = 0; a.reptile = 0; a.chaos = 0; a.ninja = 0; a.homing = 0; a.invis = 0; a.stun = 0; a.vomit = 0; a.slowT = 0; a.blind = 0;
   if (a.model && a.model.reptile) setReptileLook(a, false);
   a.maxHp = a.baseMaxHp; a.hasKunai = false; a.stealthReady = false; a.reviveTarget = null; a.reviveProg = 0;
@@ -1491,24 +1556,26 @@ function killActor(a, src) {
   checkWin();
 }
 function respawn(a) {
-  const idx = G.actors.filter((x) => x.team === a.team).indexOf(a);
-  placeAtSpawn(a, idx + randi(0, 3));
+  if (a.dummy) { a.pos.copy(a.home); a.vel.set(0, 0, 0); a.tpSeq++; }
+  else if (G.training) { placeAtSpawn(a, 0); }
+  else { const idx = G.actors.filter((x) => x.team === a.team).indexOf(a); placeAtSpawn(a, idx + randi(0, 3)); }
+  if (G.training) a.lives = 99;
   a.state = 'alive'; a.maxHp = a.baseMaxHp; a.hp = a.maxHp; a.invuln = 2.5; a.mag = { rifle: 25, pistol: 12 }; setWeapon(a, 'rifle'); a.fireCd = 0;
   if (a.ai) { a.ai.path = null; a.ai.target = null; a.ai.goal = null; }
   fxTo(a, 'ann', '부활했어요', '#4aa3ff', 1.5);
 }
 function revive(t, by) {
-  t.state = 'alive'; t.hp = 30; t.downHp = 0; t.invuln = 0.6;
+  t.state = 'alive'; t.hp = Math.round(BASE_HP * 0.3); t.downHp = 0; t.invuln = 0.6;
   by.revives++;
   feed(by, t, 'revive');
   sfxAt('revive', 0.8, t.pos);
   fxTo(t, 'ann', `${by.name}이(가) 살려줬어요!`, '#4aa3ff', 2);
 }
 function killPrincipal(p, src) {
-  p.state = 'dead'; p.respawnT = 45; p.hp = 0;
+  p.state = 'dead'; p.respawnT = G.training ? (TRAIN.principal ? 6 : Infinity) : 45; p.hp = 0;
   feed(src, p, 'kill');
   if (src && !src.isPrincipal) {
-    addBuff(src, { id: 'principal', t: 30, speed: 1.25, dmg: 1.25, regen: 4, label: '교장의 기운' });
+    addBuff(src, { id: 'principal', t: 30, speed: 1.25, dmg: 1.25, regen: 6, label: '교장의 기운' });
     src.ult = Math.min(1, src.ult + 0.25);
     fxAll('ann', `${src.name}이(가) 교장을 처치! 30초간 이속·공격력 +25%, 체력 재생`, '#ffd23f', 3.5);
   }
@@ -1516,7 +1583,7 @@ function killPrincipal(p, src) {
   pfx(p.pos.clone().setY(1.2), 40, { color: 0xffffff, speed: 6, life: 1.2, size: 0.08 });
 }
 function checkWin() {
-  if (G.over) return;
+  if (G.over || G.training) return;
   for (const t of ['A', 'B']) {
     const mem = G.actors.filter((x) => x.team === t && !x.isPrincipal);
     if (mem.length && mem.every((x) => x.state === 'out')) { fxAll('end', t === 'A' ? 'B' : 'A'); return; }
@@ -1527,6 +1594,7 @@ function checkWin() {
 function updateStatus(a, dt) {
   if (a.isPrincipal && a.state === 'dead') {
     a.respawnT -= dt;
+    if (a.respawnT <= 0 && G.training) { summonPrincipal(true); return; }
     if (a.respawnT <= 0) { a.state = 'alive'; a.hp = a.maxHp; a.pos.set(PRINCIPAL_HOME.x, 0, PRINCIPAL_HOME.z); fxAll('ann', '교장이 다시 순찰을 시작했어요', '#ffd23f', 2.5); }
     return;
   }
@@ -2234,7 +2302,7 @@ const ABIL = {
   // ---------------- 강진우 ----------------
   jinwoo: {
     Q(a) {
-      a.hp = Math.min(a.maxHp, a.hp + 45); a.stun = 0; a.slowT = 0; a.blind = 0; a.vomit = 0;
+      a.hp = Math.min(a.maxHp, a.hp + 65); a.stun = 0; a.slowT = 0; a.blind = 0; a.vomit = 0;
       fxTo(a, 'unblind');
       pfx(a.pos.clone().setY(1), 22, { color: 0xc9b98a, speed: 3, life: 0.9, size: 0.09 });
     },
@@ -2252,7 +2320,7 @@ const ABIL = {
       a.meleeAnim = 0.3;
     },
     X(a) {
-      a.reptile = 5; a.maxHp = a.baseMaxHp + 100; a.hp += 100;
+      a.reptile = 5; a.maxHp = a.baseMaxHp + 150; a.hp += 150;
       addBuff(a, { id: 'reptile', t: 5, speed: 1.4, dmg: 1.5, label: '파충류 수인화', onEnd: (x) => { if (x.reptile > 0) { x.reptile = 0.0001; } } });
       pfx(a.pos.clone().setY(1), 30, { color: 0x3f8f3a, speed: 4, life: 1, size: 0.1 });
     },
@@ -2277,7 +2345,7 @@ const ABIL = {
   },
   // ---------------- 김민찬 ----------------
   minchan: {
-    Q(a) { addBuff(a, { id: 'drink', t: 5, speed: 1.35, label: '에너지 드링크' }); a.hp = Math.min(a.maxHp, a.hp + 15); pfx(a.pos.clone().setY(1.2), 12, { color: 0x3a7bd5, speed: 2.5, life: 0.6, size: 0.06 }); },
+    Q(a) { addBuff(a, { id: 'drink', t: 5, speed: 1.35, label: '에너지 드링크' }); a.hp = Math.min(a.maxHp, a.hp + 25); pfx(a.pos.clone().setY(1.2), 12, { color: 0x3a7bd5, speed: 2.5, life: 0.6, size: 0.06 }); },
     E(a) {
       const f = a.fwd(V());
       const pr = spawnProj({
@@ -2501,7 +2569,7 @@ function perceive(a) {
     const hostile = isHostile(a, t) || (a.chaos > 0 && !t.isPrincipal);
     if (!hostile) continue;
     const d = t.pos.distanceTo(a.pos);
-    if (t.isPrincipal && !(d < 16 || t.ai.target === a)) continue;
+    if (t.isPrincipal && !(d < 10 || t.ai.target === a)) continue;
     if (!botCanSee(a, t, eye)) continue;
     let score = d + (t.state === 'downed' ? 22 : 0) + (t === ai.target ? -6 : 0) + (t.isPrincipal ? 6 : 0);
     if (score < bs) { bs = score; best = t; }
@@ -2629,19 +2697,19 @@ function botAbilities(a) {
       break;
     case 'kyungin':
       if (!t && a.ult >= 1 && Math.random() < 0.35) useAbility(a, 'X');
-      if (t && a.hp < 65 && a.cd.Q <= 0 && d > 5) { faceTo(a, tp); useAbility(a, 'Q'); restore(); }
+      if (t && a.hp < 95 && a.cd.Q <= 0 && d > 5) { faceTo(a, tp); useAbility(a, 'Q'); restore(); }
       if (!t && a.cd.E <= 0 && ai.mode !== 'revive' && Math.random() < 0.2) { a.pitch = 0.05; useAbility(a, 'E'); restore(); }
       break;
     case 'jinwoo':
       if (t && d < 20 && a.ult >= 1) useAbility(a, 'X');
-      if (a.hp < 55 && a.cd.Q <= 0) useAbility(a, 'Q');
+      if (a.hp < 80 && a.cd.Q <= 0) useAbility(a, 'Q');
       if (t && d < 3.6 && a.cd.E <= 0) { faceTo(a, tp); useAbility(a, 'E'); }
       break;
     case 'youngjin':
       if (t && d < 25 && a.ult >= 1) useAbility(a, 'X');
       if (t && a.stealthReady) useAbility(a, 'C');
       if (t && d < 14 && a.cd.Q <= 0 && Math.random() < 0.4) { side(); useAbility(a, 'Q'); }
-      if (t && a.hp < 55 && a.cd.E <= 0) { a.pitch = -0.6; useAbility(a, 'E'); restore(); }
+      if (t && a.hp < 80 && a.cd.E <= 0) { a.pitch = -0.6; useAbility(a, 'E'); restore(); }
       break;
     case 'minchan':
       if (t && d > 5 && d < 30 && a.ult >= 1) { faceTo(a, tp); useAbility(a, 'X'); }
@@ -2656,52 +2724,73 @@ function botAbilities(a) {
     case 'jungwoo':
       if (t && d < 30 && a.ult >= 1) useAbility(a, 'X');
       if (t && d < 20 && a.cd.E <= 0) { faceTo(a, tp, 0.012); useAbility(a, 'E'); restore(); }
-      if (t && a.hp < 50 && a.cd.Q <= 0) { side(); useAbility(a, 'Q'); }
+      if (t && a.hp < 75 && a.cd.Q <= 0) { side(); useAbility(a, 'Q'); }
       break;
   }
 }
 
 // ================= principal NPC =================
-function makePrincipalAI() { return { thinkT: 0, atkCd: 1, meleeCd: 0, target: null, goal: null, goalT: 0, path: null, pathT: 0, chasing: false, idle: 0, react: 0, swing: 0 }; }
+const BROOM_SWING = 0.6, BROOM_HIT_AT = 0.3, BROOM_RANGE = 2.7, BROOM_DMG = 40;
+function makePrincipalAI() { return { thinkT: 0, atkCd: 1, meleeCd: 0, target: null, goal: null, goalT: 0, path: null, pathT: 0, chasing: false, idle: 0, react: 0, swing: 0, chalk: 0, smashT: 0 }; }
+function broomHit(p) {
+  const f = p.fwd(V()); let any = false;
+  for (const t of G.actors) {
+    if (t === p || !t.active) continue;
+    if (G.training && !t.isPlayer && !t.dummy) continue;
+    const dx = t.pos.x - p.pos.x, dz = t.pos.z - p.pos.z, d = Math.hypot(dx, dz);
+    if (d > BROOM_RANGE + t.radius || Math.abs(t.pos.y - p.pos.y) > 1.6) continue;
+    if (d > 0.6 && (dx * f.x + dz * f.z) / d < 0.35) continue;
+    damage(t, BROOM_DMG, p); any = true; fxTo(t, 'shake', 0.35);
+    if (t.active) t.knock.add(V(dx, 0, dz).normalize().multiplyScalar(8).add(V(0, 3.5, 0)));
+    pfx(V(t.pos.x, t.pos.y + 1.1, t.pos.z), 10, { color: 0xd8b65a, speed: 3, life: 0.5, size: 0.05 });
+  }
+  sfxAt(any ? 'broom' : 'whoosh', any ? 0.8 : 0.5, p.pos);
+}
 function updatePrincipal(p, dt) {
   const ai = p.ai;
-  ai.swing = Math.max(0, ai.swing - dt);
-  if (!p.alive) return;
-  if (p.stun > 0 || p.vomit > 0) { p.moveInput.set(0, 0, 0); return; }
+  ai.swing = Math.max(0, ai.swing - dt); ai.chalk = Math.max(0, ai.chalk - dt);
+  if (!p.alive) { ai.smashT = 0; return; }
+  // out of combat: recover slowly so he keeps patrolling instead of staying at low HP
+  if (G.time - p.lastHitT > 6 && p.hp < p.maxHp) p.hp = Math.min(p.maxHp, p.hp + 70 * dt);
+  if (ai.smashT > 0) { ai.smashT -= dt; if (ai.smashT <= 0 && p.stun <= 0 && p.vomit <= 0) broomHit(p); }
+  if (p.stun > 0 || p.vomit > 0) { p.moveInput.set(0, 0, 0); ai.smashT = 0; return; }
   ai.thinkT -= dt; ai.atkCd -= dt; ai.meleeCd -= dt; ai.goalT -= dt;
   if (ai.thinkT <= 0) {
     ai.thinkT = 0.25;
     let best = null, bd = 24; const eye = p.eyePos(V());
     for (const t of G.actors) {
       if (t === p || !t.alive) continue;
+      if (G.training && !t.isPlayer) continue;
       const d = t.pos.distanceTo(p.pos);
       if (d >= bd || (t.invis > 0 && d > 3.5)) continue;
-      if (!isIndoor(t.pos.x, t.pos.z, 7)) continue;
+      if (!G.training && !isIndoor(t.pos.x, t.pos.z, 7)) continue;
       if (!hasLOS(eye, t.eyePos(V()))) continue;
       best = t; bd = d;
     }
     if (best && best !== ai.target) ai.react = 0.45;
     ai.target = best; ai.chasing = !!best;
-    if (!best && (!ai.goal || flatDist(ai.goal, p.pos) < 1.5 || ai.goalT <= 0)) {
+    if (!best && G.training && G.player) { if (!ai.goal || ai.goalT <= 0 || flatDist(ai.goal, G.player.pos) > 3) { ai.goal = G.player.pos.clone(); ai.goalT = 2; ai.path = null; ai.idle = 0; } }
+    else if (!best && (!ai.goal || flatDist(ai.goal, p.pos) < 1.5 || ai.goalT <= 0)) {
       const pt = pick(INDOOR_POINTS); ai.goal = V(pt[0], 0, pt[1]); ai.goalT = 15; ai.path = null; ai.idle = rand(0, 2.5);
     }
   }
   const goal = ai.target ? ai.target.pos : ai.goal;
   let m = V();
   if (ai.idle > 0 && !ai.target) ai.idle -= dt;
-  else if (goal) { m = followPath(p, goal, dt); if (ai.target && flatDist(ai.target.pos, p.pos) < 1.5) m.set(0, 0, 0); }
+  else if (goal) { m = followPath(p, goal, dt); if (ai.target && flatDist(ai.target.pos, p.pos) < 1.7) m.set(0, 0, 0); }
+  if (ai.swing > 0) m.multiplyScalar(0.25); // plant feet while swinging
   p.moveInput.copy(m);
   if (ai.target) { const want = Math.atan2(-(ai.target.pos.x - p.pos.x), -(ai.target.pos.z - p.pos.z)); p.yaw += clamp(angDiff(p.yaw, want), -6 * dt, 6 * dt); }
   else if (m.lengthSq() > 0.01) p.yaw += clamp(angDiff(p.yaw, Math.atan2(-m.x, -m.z)), -4 * dt, 4 * dt);
   if (ai.target) {
     const t = ai.target, d = flatDist(t.pos, p.pos);
     ai.react -= dt;
-    if (d < 2.2 && ai.meleeCd <= 0) {
-      ai.meleeCd = 1.1; ai.swing = 0.4;
-      damage(t, 28, p); if (t.active) t.knock.add(V(t.pos.x - p.pos.x, 0, t.pos.z - p.pos.z).normalize().multiplyScalar(7).add(V(0, 3, 0)));
-      sfxAt('smash', 0.5, p.pos);
-    } else if (d < 21 && ai.atkCd <= 0 && ai.react <= 0) {
-      ai.atkCd = rand(0.7, 1.0); ai.swing = 0.3;
+    if (d < BROOM_RANGE - 0.2 && ai.meleeCd <= 0 && ai.swing <= 0) {
+      // broom smash: wind up overhead, then bring it down (damage lands mid-swing)
+      ai.meleeCd = 1.5; ai.swing = BROOM_SWING; ai.smashT = BROOM_HIT_AT;
+      sfxAt('whoosh', 0.35, p.pos);
+    } else if (d >= BROOM_RANGE && d < 21 && ai.atkCd <= 0 && ai.react <= 0 && ai.swing <= 0) {
+      ai.atkCd = rand(0.9, 1.3); ai.chalk = 0.3;
       throwChalk(p, t);
     }
   }
@@ -2717,7 +2806,7 @@ function throwChalk(p, t) {
   spawnProj({
     kind: 'chalk', owner: p, pos: o, vel, gravity: g, radius: 0.06, life: 2, align: true,
     filter: (x) => x !== p,
-    onActor: (pr, x) => { damage(x, 12, p); pfx(pr.pos, 6, { color: 0xffffff, speed: 2, life: 0.4, size: 0.04 }); return true; },
+    onActor: (pr, x) => { damage(x, 16, p); pfx(pr.pos, 6, { color: 0xffffff, speed: 2, life: 0.4, size: 0.04 }); return true; },
     onWall: (pr) => { pfx(pr.pos, 5, { color: 0xffffff, speed: 1.5, life: 0.5, size: 0.04 }); return true; },
   });
   sfxAt('chalk', 0.8, o);
@@ -2814,6 +2903,7 @@ window.addEventListener('keydown', (e) => {
     case 'Tab': showScoreboard(true); break;
     case 'Escape': if (INPUT.noLock) showPause(); break;
   }
+  if (G.training) { const tk = { KeyU: 'ult', KeyK: 'cd', KeyM: 'move', KeyP: 'principal', KeyH: 'heal', KeyJ: 'reset' }[e.code]; if (tk) trainAction(tk); }
 });
 window.addEventListener('keyup', (e) => { keys[e.code] = false; if (e.code === 'Tab') showScoreboard(false); });
 window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; INPUT.mouseDown = false; });
@@ -3061,6 +3151,73 @@ function updateTouchHUD() {
 }
 
 // ---- visuals.js ----
+// ================= principal broom pose (2-bone arm IK onto the broom handle) =================
+const _ik = { S: new THREE.Vector3(), d: new THREE.Vector3(), pole: new THREE.Vector3(), E: new THREE.Vector3(), u: new THREE.Vector3(), q: new THREE.Quaternion(), down: new THREE.Vector3(0, -1, 0), g0: new THREE.Vector3(), g1: new THREE.Vector3() };
+function solveArmIK(arm, fore, T, L1 = 0.3, L2 = 0.34) {
+  const { S, d, pole, E, u, q, down } = _ik;
+  S.copy(arm.position); d.subVectors(T, S);
+  const len = clamp(d.length(), 0.08, L1 + L2 - 0.002); d.normalize();
+  const cosA = clamp((L1 * L1 + len * len - L2 * L2) / (2 * L1 * len), -1, 1), sinA = Math.sqrt(1 - cosA * cosA);
+  pole.set(Math.sign(S.x) * 0.9, -0.5, -0.45); pole.addScaledVector(d, -pole.dot(d)).normalize();
+  E.copy(S).addScaledVector(d, L1 * cosA).addScaledVector(pole, L1 * sinA);
+  u.subVectors(E, S).normalize(); arm.quaternion.setFromUnitVectors(down, u);
+  u.subVectors(T, E).normalize().applyQuaternion(q.copy(arm.quaternion).invert()); fore.quaternion.setFromUnitVectors(down, u);
+}
+const BROOM_POSE = {
+  //        grip x, y,    z,    tilt X,  lean
+  sweep:  [0.02, 1.0, 0.3, -0.84, 0.13],
+  windup: [0.0, 1.58, 0.06, -3.45, -0.08],
+  strike: [0.0, 1.25, 0.44, -1.32, 0.2],
+};
+const easeIO = (t) => t * t * (3 - 2 * t);
+function principalPose(a, m, dt, hs) {
+  const ai = a.ai || { swing: 0, chalk: 0 };
+  if (NET.role === 'client') { ai.swing = Math.max(0, ai.swing - dt); ai.chalk = Math.max(0, (ai.chalk || 0) - dt); }
+  const moving = Math.min(hs, 4.5);
+  m.sweepT += dt * (2.4 + moving * 1.15);
+  const sweepAmp = 0.34 + moving * 0.05;
+  const sw = Math.sin(m.sweepT) * sweepAmp;
+  let pose = BROOM_POSE.sweep.slice(); let yawS = sw, xS = sw * 0.09;
+  const attacking = ai.swing > 0 && a.alive;
+  if (attacking) {
+    const k = 1 - ai.swing / BROOM_SWING;
+    const mix = (A, B, t) => A.map((v, i) => v + (B[i] - v) * t);
+    let fromYaw = 1;
+    if (k < 0.45) { const t = easeIO(k / 0.45); pose = mix(BROOM_POSE.sweep, BROOM_POSE.windup, t); fromYaw = 1 - t; }
+    else if (k < 0.6) { const t = (k - 0.45) / 0.15; pose = mix(BROOM_POSE.windup, BROOM_POSE.strike, t * t); fromYaw = 0; }
+    else { const t = easeIO((k - 0.6) / 0.4); pose = mix(BROOM_POSE.strike, BROOM_POSE.sweep, t); fromYaw = t; }
+    yawS *= fromYaw; xS *= fromYaw;
+  }
+  const [gx, gy, gz, tilt, lean] = pose;
+  const pv = m.broom;
+  pv.position.set(gx + xS, gy, gz);
+  pv.rotation.set(tilt, yawS, 0);
+  m.torso.rotation.x = lean;
+  m.head.rotation.x = attacking ? 0 : 0.12; // eyes on the floor while sweeping
+  pv.updateMatrix();
+  // right hand high on the handle, left hand lower
+  const g0 = _ik.g0.set(0, 0.24, 0).applyMatrix4(pv.matrix), g1 = _ik.g1.set(0, -0.1, 0).applyMatrix4(pv.matrix);
+  solveArmIK(m.arms[0], m.fores[0], g0);
+  if (ai.chalk > 0) { // left hand flicks chalk
+    const th = Math.sin((1 - ai.chalk / 0.3) * Math.PI);
+    m.arms[1].rotation.set(-0.4 - th * 2.3, 0, 0.12); m.fores[1].rotation.set(-0.5 + th * 0.3, 0, 0);
+  } else solveArmIK(m.arms[1], m.fores[1], g1);
+  // legs: lunge on the strike
+  if (attacking) { const k = 1 - ai.swing / BROOM_SWING; const st = k > 0.4 && k < 0.85 ? Math.sin(((k - 0.4) / 0.45) * Math.PI) : 0; m.legs[1].rotation.x = -st * 0.5; m.legs[0].rotation.x = st * 0.25; }
+  // dust + swish while sweeping
+  if (!attacking && a.alive) {
+    const sign = Math.cos(m.sweepT) > 0 ? 1 : -1;
+    const near = a.pos.distanceTo(camera.position) < 30;
+    if (sign !== m.lastSweepSign) { m.lastSweepSign = sign; if (near) sfx('sweep', 0.35 + moving * 0.05, a.pos); }
+    m.dustT -= dt;
+    if (near && m.dustT <= 0 && Math.abs(Math.cos(m.sweepT)) > 0.5 && dt > 0) {
+      m.dustT = 0.09;
+      const tp = m.broomTip.getWorldPosition(_ik.u); tp.y = Math.max(0.05, tp.y);
+      spawnParticles(tp, 2, { color: Math.random() < 0.5 ? 0xbfae94 : 0x9c8f7c, speed: 1.1, life: 0.55, size: 0.045, gravity: -0.6 });
+    }
+  }
+}
+
 // ================= actor visuals =================
 const TAGCACHE = new Map();
 function tagTexture(key, draw) {
@@ -3175,11 +3332,7 @@ function updateActorVisual(a, dt) {
     m.arms[1].rotation.x = (a.reviveTarget ? -0.6 : -1.25) - th * 1.2;
     m.arms[0].rotation.x = a.vomit > 0 ? -0.3 : a.reviveTarget ? -0.6 : -1.15;
     m.gun.visible = a.weapon !== 'kunai' && a.weapon !== 'knife';
-  } else {
-    const swing = a.ai && a.ai.swing > 0 ? Math.sin((a.ai.swing / 0.4) * Math.PI) : 0;
-    m.arms[0].rotation.x = -sw * 0.6 - swing * 2.4;
-    m.arms[1].rotation.x = sw * 0.6;
-  }
+  } else principalPose(a, m, dt, hs);
   // stealth / glow
   const hostileToMe = isHostile(P, a) && a !== P;
   setOutline(a, a === P || G.chaosView || a.invis > 0 ? null : a.isPrincipal ? 'principal' : hostileToMe ? 'enemy' : 'ally');
@@ -3317,7 +3470,7 @@ function showPause() {
 function hidePause() { if (!UI.pause) return; G.paused = false; UI.pause.classList.add('hidden'); }
 function showScoreboard(on) { if (!G.running) return; UI.score.classList.toggle('hidden', !on); if (on) UI.score.innerHTML = scoreTable(); }
 function scoreTable() {
-  const rows = (t) => G.actors.filter((a) => a.team === t).map((a) => `<tr class="${a === G.player ? 'me' : ''}"><td style="color:${TEAM[t].css}">${a.name}${a.nick ? ` <small>(${escapeHtml(a.nick)})</small>` : a.isHuman ? '' : ' <small>봇</small>'}</td><td>${CHARS[a.charId].role}</td><td>${a.kills}</td><td>${a.knocks}</td><td>${a.deaths}</td><td>${a.revives}</td><td>${'♥'.repeat(Math.max(0, a.lives))}${'♡'.repeat(3 - Math.max(0, a.lives))}</td></tr>`).join('');
+  const rows = (t) => G.actors.filter((a) => a.team === t).map((a) => `<tr class="${a === G.player ? 'me' : ''}"><td style="color:${TEAM[t].css}">${a.name}${a.nick ? ` <small>(${escapeHtml(a.nick)})</small>` : a.isHuman ? '' : ' <small>봇</small>'}</td><td>${CHARS[a.charId].role}</td><td>${a.kills}</td><td>${a.knocks}</td><td>${a.deaths}</td><td>${a.revives}</td><td>${a.lives > 3 ? '∞' : '♥'.repeat(Math.max(0, a.lives)) + '♡'.repeat(3 - Math.max(0, a.lives))}</td></tr>`).join('');
   return `<table><thead><tr><th>이름</th><th>역할</th><th>킬</th><th>기절</th><th>데스</th><th>부활</th><th>목숨</th></tr></thead>
   <tbody><tr class="sep"><td colspan="7" style="color:${TEAM.A.css}">${TEAM.A.name}</td></tr>${rows('A')}<tr class="sep"><td colspan="7" style="color:${TEAM.B.css}">${TEAM.B.name}</td></tr>${rows('B')}</tbody></table>`;
 }
@@ -3411,15 +3564,16 @@ function updateHUD(dt) {
     const st = a.state; const cls = `tm ${st}${a === P ? ' me' : ''}`;
     const extra = st === 'dead' ? `<span class="rt">${Math.ceil(a.respawnT)}</span>` : st === 'downed' ? '<span class="rt">✚</span>' : '';
     const hp = st === 'alive' ? Math.round((a.hp / a.maxHp) * 100) : 0;
-    return `<div class="${cls}"><div class="tn">${a.name}${extra}</div><div class="thp"><i style="width:${hp}%"></i></div><div class="tl">${'♥'.repeat(Math.max(0, a.lives))}<s>${'♥'.repeat(3 - Math.max(0, a.lives))}</s></div></div>`;
+    return `<div class="${cls}"><div class="tn">${a.name}${extra}</div><div class="thp"><i style="width:${hp}%"></i></div><div class="tl">${a.lives > 3 ? '∞' : '♥'.repeat(Math.max(0, a.lives)) + '<s>' + '♥'.repeat(3 - Math.max(0, a.lives)) + '</s>'}</div></div>`;
   }).join('');
   setHTML(UI.teamA, teamHTML('A')); setHTML(UI.teamB, teamHTML('B'));
   // hp / lives
   const c = CHARS[P.charId];
   setText(UI.charname, `${c.name} · ${c.role}`);
-  setHTML(UI.lives, `목숨 ${'<b>♥</b>'.repeat(Math.max(0, P.lives))}${'<s>♥</s>'.repeat(3 - Math.max(0, P.lives))}`);
+  setHTML(UI.lives, P.lives > 3 ? '목숨 <b>∞</b>' : `목숨 ${'<b>♥</b>'.repeat(Math.max(0, P.lives))}${'<s>♥</s>'.repeat(3 - Math.max(0, P.lives))}`);
+  if (G.training) trainHUD();
   if (P.state === 'downed') { setText(UI.hpnum, `기절 ${Math.ceil(P.downHp)}`); UI.hpbar.style.width = `${P.downHp}%`; UI.hpbar.style.background = '#ff8a3d'; }
-  else { setText(UI.hpnum, `${Math.ceil(P.hp)}`); UI.hpbar.style.width = `${clamp(P.hp / Math.max(100, P.maxHp), 0, 1) * 100}%`; UI.hpbar.style.background = P.hp < 35 ? '#ff4655' : P.maxHp > 100 ? '#6fcf6a' : '#f2f2f2'; }
+  else { setText(UI.hpnum, `${Math.ceil(P.hp)}`); UI.hpbar.style.width = `${clamp(P.hp / Math.max(P.baseMaxHp, P.maxHp), 0, 1) * 100}%`; UI.hpbar.style.background = P.hp < P.baseMaxHp * 0.35 ? '#ff4655' : P.maxHp > P.baseMaxHp ? '#6fcf6a' : '#f2f2f2'; }
   // center info
   let ci = '';
   if (P.state === 'dead') ci = `<div class="big">사망</div><div>${Math.ceil(P.respawnT)}초 후 부활 · 남은 목숨 ${P.lives}</div>`;
@@ -3486,6 +3640,13 @@ function buildMenu() {
     if (NET.role === 'host') hostStart();
     else if (NET.role === 'solo') startSolo();
   });
+  $('#trainbtn').addEventListener('click', () => {
+    audioInit();
+    if (TOUCH.on) { try { document.documentElement.requestFullscreen && document.documentElement.requestFullscreen().catch(() => {}); } catch (e) {} }
+    if (NET.role === 'solo') startTraining();
+  });
+  $('#trainpanel').addEventListener('click', (e) => { const b = e.target.closest('button[data-tr]'); if (b) { e.stopPropagation(); trainAction(b.dataset.tr); b.blur(); } });
+  $('#quitbtn').addEventListener('click', (e) => { e.stopPropagation(); if (NET.role !== 'solo') { leaveNet(); toMenu('방에서 나왔어요.'); } else toMenu(''); });
   $('#hostbtn').addEventListener('click', () => { audioInit(); hostRoom(); });
   $('#joinbtn').addEventListener('click', () => { audioInit(); joinRoom($('#joincode').value); });
   $('#joincode').addEventListener('keydown', (e) => { if (e.key === 'Enter') joinRoom($('#joincode').value); });
@@ -3505,7 +3666,7 @@ function buildMenu() {
   renderLobby();
 }
 function toMenu(msg, err) {
-  G.running = false; NET.inGame = false; document.body.classList.remove('ingame');
+  G.running = false; G.training = false; document.body.classList.remove('training'); NET.inGame = false; document.body.classList.remove('ingame');
   try { document.exitPointerLock(); } catch (e) {}
   UI.hud.classList.add('hidden'); UI.end.classList.add('hidden'); UI.menu.classList.remove('hidden'); hidePause();
   closeTypingLocal();
@@ -3715,7 +3876,7 @@ function snapActor(a) {
     rA: r2(a.revealed.A || 0), rB: r2(a.revealed.B || 0), ct: a.car ? r2(a.car.t) : 0, cs: a.car ? r2(a.car.speed) : 0,
     tm: [r2(a.invis), r2(a.reptile), r2(a.homing), r2(a.ninja), r2(a.chaos), r2(a.stun), r2(a.vomit), r2(a.slowT), r2(a.blind), r2(a.invuln)],
     sm: r2(a.speedMul()), rm: r2(a.stat('rate')), tp: a.tpSeq, ha: a.hostAuthT > 0 ? 1 : 0,
-    b: a.buffs.filter((b) => b.label).map((b) => [b.label, r2(b.t)]), sw: a.ai && a.ai.swing ? r2(a.ai.swing) : 0,
+    b: a.buffs.filter((b) => b.label).map((b) => [b.label, r2(b.t)]), sw: a.ai && a.ai.swing ? r2(a.ai.swing) : 0, cw: a.ai && a.ai.chalk ? r2(a.ai.chalk) : 0,
     an: [r2(a.throwAnim), r2(a.meleeAnim), r2(a.rollAnim || 0)], ty: a.typing ? 1 : 0, sr: a.stealthReady ? 1 : 0, hk: a.hasKunai ? 1 : 0,
   };
 }
@@ -3780,7 +3941,7 @@ function applyActorSnap(a, s) {
   [a.invis, a.reptile, a.homing, a.ninja, a.chaos, a.stun, a.vomit, a.slowT, a.blind, a.invuln] = s.tm;
   a.netSM = s.sm; a.netRM = s.rm; a.typing = !!s.ty; a.stealthReady = !!s.sr; a.hasKunai = !!s.hk;
   a.buffs = s.b.map(([label, t]) => ({ id: label, label, t }));
-  if (a.ai) a.ai.swing = s.sw;
+  if (a.ai) { a.ai.swing = s.sw; a.ai.chalk = s.cw || 0; }
   a.throwAnim = Math.max(a.throwAnim, s.an[0]); a.meleeAnim = Math.max(a.meleeAnim, s.an[1]);
   if (s.an[2] > 0.25 && !(a.rollAnim > 0)) a.rollAnim = s.an[2];
   a.netPos = V(...s.p); a.netVel = V(s.v[0], 0, s.v[1]);
@@ -3899,6 +4060,7 @@ function renderLobby() {
   const L = NET.lobby;
   const inLobby = !!L && NET.role !== 'solo';
   UI.lobby.classList.toggle('hidden', !inLobby);
+  $('#trainbtn').classList.toggle('hidden', inLobby);
   $('#roomrow').classList.toggle('hidden', inLobby);
   document.querySelectorAll('#diff button').forEach((b) => { b.disabled = NET.role === 'client'; b.classList.toggle('on', b.dataset.d === G.difficulty); });
   const start = $('#startbtn');
@@ -3953,6 +4115,7 @@ function startSolo() {
 function startMatch(m) {
   clearWorld();
   NET.inGame = NET.role !== 'solo';
+  G.training = !!m.training; document.body.classList.toggle('training', G.training);
   G.difficulty = m.diff || G.difficulty;
   buildMap(m.seed);
   rebuildNav();
@@ -3981,9 +4144,104 @@ function startMatch(m) {
   UI.menu.classList.add('hidden'); UI.end.classList.add('hidden'); UI.hud.classList.remove('hidden');
   camera.fov = 78; camera.updateProjectionMatrix();
   requestLock();
+  if (G.training) { setupTraining(); return; }
   const humans = m.roster.filter((r) => r.pid).length;
   setTimeout(() => announce(humans > 1 ? `멀티 ${humans}명 · 빈자리는 봇 · 상대 팀 목숨을 전부 빼앗으세요` : '3 vs 3 · 목숨 3개 · 상대 팀을 전멸시키세요', '#ffffff', 3), 300);
   setTimeout(() => announce('본관에는 교장이 순찰 중! 처치하면 버프', '#ffd23f', 3), 1500);
+}
+
+// ================= training range =================
+const TRAIN = { noCd: false, move: false, principal: false, log: [], last: 0, max: 0, kills: 0 };
+// [forward from spawn A (m), sideways (m), mode]
+const DUMMY_SPOTS = [[6, -3, 'still'], [11, 2.5, 'still'], [17, -5, 'strafe'], [24, 4, 'still'], [36, -1, 'strafe']];
+function freeSpot(x, z) {
+  x = clamp(x, -57, 57); z = clamp(z, -37, 37);
+  if (navFreeXZ(x, z)) return [x, z];
+  for (let r = 1; r < 8; r++) for (let i = -r; i <= r; i++) for (const [dx, dz] of [[i, -r], [i, r], [-r, i], [r, i]]) if (navFreeXZ(x + dx, z + dz)) return [x + dx, z + dz];
+  return [x, z];
+}
+function startTraining() {
+  leaveNet();
+  startMatch({ seed: (Math.random() * 1e9) | 0, roster: [{ cid: MENU_SEL, team: 'A', pid: 'h', nick: null }], diff: G.difficulty, training: true });
+}
+function setupTraining() {
+  Object.assign(TRAIN, { log: [], last: 0, max: 0, kills: 0, principal: false });
+  const P = G.player, sp = SPAWN.A;
+  P.lives = 99; P.pos.set(sp.x, 0, sp.z); P.yaw = sp.yaw; P.tpSeq++;
+  const ids = CHAR_ORDER.filter((c) => c !== P.charId);
+  DUMMY_SPOTS.forEach(([fx, sz, mode], i) => {
+    const cid = ids[i % ids.length], sc = CHARS[cid].look.scale ?? 1;
+    const d = createActor({ name: `더미 ${i + 1}`, charId: cid, team: 'B' });
+    d.height = 1.92 * sc; d.eye = 1.72 * sc;
+    d.dummy = true; d.ai = null; d.isHuman = false; d.lives = 99; d.dummyMode = mode; d.dPhase = i * 1.7;
+    const [x, z] = freeSpot(sp.x + fx, sp.z + sz);
+    d.home = V(x, 0, z); d.pos.copy(d.home); d.yaw = Math.PI / 2;
+  });
+  const pr = G.principal; pr.state = 'dead'; pr.respawnT = Infinity;
+  refreshTrainButtons();
+  setTimeout(() => announce('훈련장 · 더미를 쏴서 피해량을 확인해 보세요', '#7dfcb6', 3), 300);
+  setTimeout(() => announce(TOUCH.on ? '위쪽 패널 버튼으로 궁 충전 · 쿨타임 · 교장 소환' : 'U 궁 충전 · K 쿨타임 없음 · P 교장 소환 · M 더미 이동', '#ffffff', 4), 1400);
+}
+function updateDummy(a, dt) {
+  a.triggerHeld = false; a.moveInput.set(0, 0, 0);
+  if (!a.alive || a.stun > 0 || a.vomit > 0) return;
+  const P = G.player;
+  if (P) a.yaw = Math.atan2(-(P.pos.x - a.pos.x), -(P.pos.z - a.pos.z));
+  if (a.dummyMode === 'strafe' || TRAIN.move) {
+    a.dPhase += dt;
+    const tz = a.home.z + Math.sin(a.dPhase * 1.1) * 4, dz = tz - a.pos.z, dx = a.home.x - a.pos.x;
+    a.moveInput.set(clamp(dx, -1, 1) * 0.5, 0, clamp(dz * 1.5, -1, 1));
+  } else {
+    const dx = a.home.x - a.pos.x, dz = a.home.z - a.pos.z;
+    if (Math.hypot(dx, dz) > 0.4) a.moveInput.set(dx, 0, dz).normalize();
+  }
+}
+function trainLog(amount) { TRAIN.log.push([G.time, amount]); TRAIN.last = amount; TRAIN.max = Math.max(TRAIN.max, amount); }
+function trainUpdate(dt) {
+  const P = G.player;
+  if (TRAIN.noCd) { P.cd.Q = 0; P.cd.E = 0; }
+  while (TRAIN.log.length && G.time - TRAIN.log[0][0] > 3) TRAIN.log.shift();
+}
+function trainHUD() {
+  setText($('#trDps'), String(TRAIN.log.reduce((s, e) => s + e[1], 0)));
+  setText($('#trLast'), TRAIN.last ? String(TRAIN.last) : '-');
+  setText($('#trMax'), TRAIN.max ? String(TRAIN.max) : '-');
+  setText($('#trKills'), String(TRAIN.kills));
+}
+function refreshTrainButtons() {
+  document.querySelectorAll('#trainpanel button[data-tr]').forEach((b) => {
+    const k = b.dataset.tr;
+    b.classList.toggle('on', (k === 'cd' && TRAIN.noCd) || (k === 'move' && TRAIN.move) || (k === 'principal' && TRAIN.principal));
+  });
+}
+function summonPrincipal(on) {
+  const pr = G.principal, P = G.player; if (!pr || !P) return;
+  if (on) {
+    const f = P.fwd(V());
+    const [x, z] = freeSpot(P.pos.x + f.x * 9, P.pos.z + f.z * 9);
+    pr.pos.set(x, 0, z); pr.vel.set(0, 0, 0); pr.knock.set(0, 0, 0);
+    pr.state = 'alive'; pr.hp = pr.maxHp; pr.ai = makePrincipalAI(); pr.stun = 0; pr.vomit = 0;
+    pr.yaw = Math.atan2(-(P.pos.x - x), -(P.pos.z - z));
+    announce('교장 등장! 빗자루 조심', '#ffd23f', 2);
+  } else { pr.state = 'dead'; pr.respawnT = Infinity; if (pr.ai) { pr.ai.smashT = 0; pr.ai.swing = 0; } }
+}
+function trainAction(k) {
+  if (!G.training || !G.running || G.over) return;
+  const P = G.player;
+  if (k === 'ult') { P.ult = 1; announce('궁극기 충전 완료', '#7dfcb6', 1.2); }
+  else if (k === 'cd') { TRAIN.noCd = !TRAIN.noCd; announce(TRAIN.noCd ? 'Q·E 쿨타임 없음' : '쿨타임 정상', '#7dfcb6', 1.2); }
+  else if (k === 'move') { TRAIN.move = !TRAIN.move; announce(TRAIN.move ? '모든 더미가 좌우로 움직여요' : '더미 이동 끔', '#7dfcb6', 1.2); }
+  else if (k === 'principal') { TRAIN.principal = !TRAIN.principal; summonPrincipal(TRAIN.principal); if (!TRAIN.principal) announce('교장 퇴근', '#ffd23f', 1.2); }
+  else if (k === 'heal') {
+    if (P.state === 'downed') { P.state = 'alive'; P.downHp = 0; }
+    if (P.state === 'dead') P.respawnT = 0.01;
+    else { P.hp = P.maxHp; P.stun = 0; P.slowT = 0; P.blind = 0; P.vomit = 0; }
+    announce('체력 회복', '#7dfcb6', 1);
+  }
+  else if (k === 'reset') { Object.assign(TRAIN, { log: [], last: 0, max: 0, kills: 0 }); announce('기록 초기화', '#7dfcb6', 1); }
+  else if (k === 'quit') { toMenu(''); return; }
+  sfx('reload', 0.5);
+  refreshTrainButtons();
 }
 
 function update(dt) {
@@ -3993,6 +4251,7 @@ function update(dt) {
   for (const a of G.actors) updateStatus(a, dt);
   for (const a of G.actors) {
     if (a.isPrincipal) updatePrincipal(a, dt);
+    else if (a.dummy) updateDummy(a, dt);
     else if (!a.isHuman && a.active) updateBot(a, dt);
   }
   for (const a of G.actors) if (a.active && !a.isPrincipal) updateWeapon(a, dt);
@@ -4002,6 +4261,7 @@ function update(dt) {
   updateZones(dt);
   updateEffects(dt);
   updateParticles(dt);
+  if (G.training) trainUpdate(dt);
   G.navT -= dt;
   if (G.navDirty && G.navT <= 0) { G.navDirty = false; G.navT = 0.5; rebuildNav(); buildMiniStatic(); for (const a of G.actors) if (a.ai) a.ai.path = null; }
 }
@@ -4038,7 +4298,7 @@ async function boot() {
     step: (n, dt = 1 / 60) => { for (let i = 0; i < n && !G.over; i++) { if (NET.role === 'client') clientUpdate(dt); else { update(dt); if (NET.role === 'host') hostTick(dt); } for (const a of G.actors) updateActorVisual(a, dt); updateHUD(dt); } },
     startGame: (id) => { MENU_SEL = id; startSolo(); },
     ABIL_LOG, G, NET, startSolo, startMatch, useAbility, act, keys, INPUT, TOUCH, camera, CHARS, TYPING, finishTyping, closeTyping, submitTyping, damage,
-    setDifficulty: (d) => (G.difficulty = d), pick: (id) => { MENU_SEL = id; renderLobby(); }, hostRoom, joinRoom, hostStart, setTouchMode,
+    setDifficulty: (d) => (G.difficulty = d), pick: (id) => { MENU_SEL = id; renderLobby(); }, hostRoom, joinRoom, hostStart, setTouchMode, startTraining, trainAction, TRAIN,
   };
   window.__ready = true;
 }
