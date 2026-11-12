@@ -74,31 +74,37 @@ export function makeSky() {
   return m;
 }
 
-// ---------- 바람에 흔들리는 풀 ----------
-export function makeGrass(count, radius, fog) {
+// ---------- 끝없이 이어지는 풀 (카메라 주변 타일을 감싸 돈다) ----------
+export function makeGrass(count, tile, fog) {
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute([-0.06, 0, 0, 0.06, 0, 0, 0, 1, 0], 3));
   const tint = new Float32Array(count);
   const mesh = new THREE.InstancedMesh(geo, null, count);
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler();
   for (let i = 0; i < count; i++) {
-    const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * radius;
     e.set(0, Math.random() * Math.PI, 0); q.setFromEuler(e);
-    const s = 0.28 + Math.random() * 0.4;
-    m4.compose(new THREE.Vector3(Math.cos(a) * r, 0, Math.sin(a) * r), q, new THREE.Vector3(0.8 + Math.random() * 0.8, s, 1));
+    const s = 0.28 + Math.random() * 0.42;
+    m4.compose(new THREE.Vector3((Math.random() - 0.5) * tile, 0, (Math.random() - 0.5) * tile), q, new THREE.Vector3(0.8 + Math.random() * 0.8, s, 1));
     mesh.setMatrixAt(i, m4); tint[i] = Math.random();
   }
   geo.setAttribute('aTint', new THREE.InstancedBufferAttribute(tint, 1));
   mesh.material = new THREE.ShaderMaterial({
     side: THREE.DoubleSide,
-    uniforms: { time: { value: 0 }, base: { value: new THREE.Color(0x88c278) }, tip: { value: new THREE.Color(0xc8e88e) },
+    uniforms: { time: { value: 0 }, cam: { value: new THREE.Vector3() }, tile: { value: tile }, base: { value: new THREE.Color(0x88c278) }, tip: { value: new THREE.Color(0xc8e88e) },
       fogC: { value: new THREE.Color(fog.color) }, fogN: { value: fog.near }, fogF: { value: fog.far } },
     vertexShader: `
-      uniform float time; attribute float aTint; varying float vH; varying float vT; varying float vD;
+      uniform float time; uniform vec3 cam; uniform float tile; attribute float aTint; varying float vH; varying float vT; varying float vD;
       void main(){
-        vec4 wp = modelMatrix * instanceMatrix * vec4(position, 1.0);
+        vec4 ip = instanceMatrix * vec4(position, 1.0);
+        vec2 base = vec2(instanceMatrix[3][0], instanceMatrix[3][2]);
+        float hT = tile * 0.5;
+        vec2 rel = mod(base - cam.xz + hT, tile) - hT;
+        vec2 shift = rel + cam.xz - base;
+        vec4 wp = vec4(ip.x + shift.x, ip.y, ip.z + shift.y, 1.0);
+        float fade = 1.0 - smoothstep(hT * 0.6, hT, length(rel));
+        wp.y *= fade;
         float h = position.y; vH = h; vT = aTint;
-        float sway = (sin(time*1.7 + wp.x*0.35 + wp.z*0.22) * 0.5 + 0.7) * 0.22 * h;
+        float sway = (sin(time*1.7 + wp.x*0.35 + wp.z*0.22) * 0.5 + 0.7) * 0.22 * h * fade;
         wp.x += sway; wp.z += sway * 0.35;
         vec4 mv = viewMatrix * wp; vD = -mv.z;
         gl_Position = projectionMatrix * mv;
@@ -114,72 +120,31 @@ export function makeGrass(count, radius, fog) {
       }`,
   });
   mesh.frustumCulled = false;
-  mesh.userData.tick = t => { mesh.material.uniforms.time.value = t; };
+  mesh.userData.tick = (t, cam) => { mesh.material.uniforms.time.value = t; if (cam) mesh.material.uniforms.cam.value.copy(cam.position); };
   return mesh;
 }
 
-// ---------- 배경 (풀밭, 먼 산, 성, 나무, 유적 벽) ----------
-export function makeWorld(scene, arenaR, quality) {
-  const root = new THREE.Group(); scene.add(root);
-  const ground = new THREE.Mesh(new THREE.CircleGeometry(160, 48), toonMat(PALETTE.grass));
-  ground.rotation.x = -Math.PI / 2; root.add(ground);
-  // 돌바닥 조각
-  for (let i = 0; i < 14; i++) {
-    const a = Math.random() * Math.PI * 2, r = Math.random() * (arenaR - 3);
-    const t = new THREE.Mesh(new THREE.CircleGeometry(0.8 + Math.random() * 1.6, 7), toonMat(0xcfc6a8));
-    t.rotation.x = -Math.PI / 2; t.position.set(Math.cos(a) * r, 0.01, Math.sin(a) * r); root.add(t);
-  }
-  // 경기장 둘레의 무너진 유적 벽 (틈 사이로 바깥 초원이 보이게)
-  const ring = group(); root.add(ring);
-  const segs = 22;
-  for (let i = 0; i < segs; i++) {
-    if (i % 4 === 1) continue;
-    const a = (i / segs) * Math.PI * 2;
-    const x = Math.cos(a) * (arenaR + 1.2), z = Math.sin(a) * (arenaR + 1.2);
-    const tall = (i % 5 === 0);
-    const h = tall ? 5.5 : 1.2 + Math.random() * 2.2;
-    const w = addPart(ring, G.box(5.2, h, 1.1), PALETTE.stone, [x, h / 2, z], { ow: 0.06 });
-    w.rotation.y = -a + Math.PI / 2; w.userData.outline.rotation.y = w.rotation.y;
-    if (tall) { // 아치
-      const top = addPart(ring, G.box(5.2, 0.9, 1.3), 0xe3dacb, [x, h + 0.4, z], { ow: 0.06 });
-      top.rotation.y = w.rotation.y; top.userData.outline.rotation.y = w.rotation.y;
-      const moss = addPart(ring, G.box(5.3, 0.35, 1.35), PALETTE.moss, [x, h + 0.95, z], { outline: false });
-      moss.rotation.y = w.rotation.y;
-    }
-  }
-  // 나무
-  const trees = quality === 'low' ? 14 : 26;
-  for (let i = 0; i < trees; i++) {
-    const a = Math.random() * Math.PI * 2, r = arenaR + 6 + Math.random() * 30;
-    root.add(makeTree(Math.cos(a) * r, Math.sin(a) * r, 0.8 + Math.random() * 0.8));
-  }
-  // 먼 언덕과 절벽 위의 성
-  const hills = [[-120, -80, 50, 0x9cc792], [60, -140, 70, 0x8fbf9a], [140, 20, 55, 0xa6cf96], [-100, 110, 60, 0x9cc792], [40, 150, 45, 0xa6cf96]];
-  for (const [x, z, r, c] of hills) {
-    const h = new THREE.Mesh(G.sph(r, 20, 12), toonMat(c)); h.scale.y = 0.35; h.position.set(x, -r * 0.08, z); root.add(h);
-  }
-  const cliff = group(); root.add(cliff);
-  addPart(cliff, G.cyl(26, 34, 26, 9), 0xc9c0ad, [0, 13, 0], { ow: 0.3 });
-  addPart(cliff, G.cyl(26.5, 26.5, 2, 9), PALETTE.moss, [0, 26.5, 0], { outline: false });
-  const castle = [[0, 32, 0, 6, 12], [-6, 30, 2, 3.2, 9], [6, 30, -1, 3.2, 10], [2, 36, -3, 2.2, 14]];
-  for (const [x, y, z, r, h] of castle) {
-    addPart(cliff, G.cyl(r, r, h, 8), 0xe8e0d0, [x, y, z], { ow: 0.15 });
-    addPart(cliff, G.cone(r * 1.25, h * 0.6, 8), 0x7d8fb3, [x, y + h / 2 + h * 0.3, z], { ow: 0.15 });
-  }
-  cliff.position.set(55, 0, -105);
-  return root;
+// ---------- 월드 소품 ----------
+export function makeGround(R, regionTints) {
+  const g = new THREE.Group();
+  const base = new THREE.Mesh(new THREE.CircleGeometry(R + 120, 64), toonMat(PALETTE.grass)); base.rotation.x = -Math.PI / 2; g.add(base);
+  regionTints.forEach((c, i) => { // 지역마다 풀빛을 살짝 다르게
+    const a0 = (i / regionTints.length) * Math.PI * 2;
+    const m = new THREE.Mesh(new THREE.RingGeometry(18, R + 10, 24, 1, a0, Math.PI * 2 / regionTints.length), toonMat(c));
+    m.rotation.x = -Math.PI / 2; m.position.y = 0.005; g.add(m);
+  });
+  return g;
 }
-
-export function makeTree(x, z, s = 1) {
+export function makeTree(x, z, s = 1, kind = 0) {
   const g = group();
   addPart(g, G.cyl(0.25, 0.4, 3, 7), 0x8a6a4a, [0, 1.5, 0]);
-  addPart(g, G.sph(1.8, 10, 8), 0x6fae5c, [0, 3.8, 0], { ow: 0.06 });
+  const leaf = [0x6fae5c, 0x7cba62, 0x5f9e52][kind % 3];
+  addPart(g, G.sph(1.8, 10, 8), leaf, [0, 3.8, 0], { ow: 0.06 });
   addPart(g, G.sph(1.3, 10, 8), 0x86c46a, [0.9, 4.6, 0.3], { ow: 0.06 });
   addPart(g, G.sph(1.2, 10, 8), 0x5f9e52, [-0.9, 4.3, -0.4], { ow: 0.06 });
   g.position.set(x, 0, z); g.scale.setScalar(s);
   return g;
 }
-
 export function makeObstacle(kind, r) {
   const g = group();
   if (kind === 'pillar') {
@@ -190,10 +155,273 @@ export function makeObstacle(kind, r) {
   } else if (kind === 'wall') {
     addPart(g, G.box(r * 2.1, 2.2, 0.9), PALETTE.stone, [0, 1.1, 0], { ow: 0.05 });
     addPart(g, G.box(r * 2.2, 0.3, 1.0), PALETTE.moss, [0, 2.3, 0], { outline: false });
+  } else if (kind === 'giantshroom') {
+    addPart(g, G.cyl(r * 0.35, r * 0.45, r * 2.4, 10), 0xf2e6cf, [0, r * 1.2, 0], { ow: 0.05 });
+    addPart(g, G.hemi(r * 1.4), [0xd9614c, 0xa36bd1, 0xe08a4a][Math.floor(Math.random() * 3)], [0, r * 2.2, 0], { scale: [1, 0.6, 1], ow: 0.06 });
+  } else if (kind === 'crystal') {
+    for (let i = 0; i < 4; i++) addPart(g, G.cone(r * 0.35, r * (2 + Math.random() * 2), 5), 0x9fd8f0, [Math.cos(i * 1.7) * r * 0.4, r, Math.sin(i * 1.7) * r * 0.4], { rot: [Math.random() * 0.4 - 0.2, 0, Math.random() * 0.4 - 0.2], mat: { emissive: 0x1a5a70 }, ow: 0.04 });
   } else {
     addPart(g, new THREE.DodecahedronGeometry(r, 0), 0xb9b0a0, [0, r * 0.55, 0], { ow: 0.06, scale: [1, 0.75, 1] });
     addPart(g, G.sph(r * 0.4, 8, 6), PALETTE.moss, [r * 0.3, r * 1.0, 0.1], { outline: false });
   }
+  return g;
+}
+export function makeCliffRing(R) {
+  const g = group();
+  const n = 60;
+  for (let i = 0; i < n; i++) {
+    const a = i / n * Math.PI * 2, rr = R + 6 + Math.random() * 6, h = 10 + Math.random() * 14, w = 6 + Math.random() * 5;
+    addPart(g, G.cyl(w * 0.7, w, h, 7), [0xc9c0ad, 0xbdb39d, 0xd3cab6][i % 3], [Math.cos(a) * rr, h / 2, Math.sin(a) * rr], { ow: 0.2 });
+    addPart(g, G.cyl(w * 0.72, w * 0.72, 1.2, 7), PALETTE.moss, [Math.cos(a) * rr, h + 0.4, Math.sin(a) * rr], { outline: false });
+  }
+  return g;
+}
+export function makeCastle() {
+  const g = group();
+  addPart(g, G.cyl(26, 34, 26, 9), 0xc9c0ad, [0, 13, 0], { ow: 0.3 });
+  addPart(g, G.cyl(26.5, 26.5, 2, 9), PALETTE.moss, [0, 26.5, 0], { outline: false });
+  for (const [x, y, z, r, h] of [[0, 32, 0, 6, 12], [-6, 30, 2, 3.2, 9], [6, 30, -1, 3.2, 10], [2, 36, -3, 2.2, 14]]) {
+    addPart(g, G.cyl(r, r, h, 8), 0xe8e0d0, [x, y, z], { ow: 0.15 });
+    addPart(g, G.cone(r * 1.25, h * 0.6, 8), 0x7d8fb3, [x, y + h / 2 + h * 0.3, z], { ow: 0.15 });
+  }
+  return g;
+}
+export function makeWindmill() {
+  const g = group();
+  addPart(g, G.cyl(1.6, 2.4, 8, 10), 0xf1e8d6, [0, 4, 0], { ow: 0.06 });
+  addPart(g, G.cone(2.3, 2.6, 10), 0xc0614a, [0, 9.3, 0], { ow: 0.06 });
+  addPart(g, G.box(0.9, 1.6, 0.2), 0x8a6a4a, [0, 0.8, 2.3]);
+  const blades = group(); blades.position.set(0, 7.2, 2.3);
+  for (let i = 0; i < 4; i++) { const b = addPart(blades, G.box(0.9, 5.2, 0.12), 0xe8dcc0, [0, 2.6, 0], { ow: 0.04 }); const piv = new THREE.Group(); piv.add(b, b.userData.outline); piv.rotation.z = i * Math.PI / 2; blades.add(piv); }
+  addPart(blades, G.sph(0.4, 8, 6), 0x8a6a4a, [0, 0, 0.1]);
+  g.add(blades); g.userData.blades = blades;
+  return g;
+}
+export function makeTent(color) {
+  const g = group();
+  addPart(g, G.cone(2.2, 2.6, 4), color, [0, 1.3, 0], { rot: [0, Math.PI / 4, 0], ow: 0.05 });
+  addPart(g, G.box(0.7, 1.2, 0.1), 0x3a3226, [0, 0.6, 1.2], { outline: false });
+  return g;
+}
+export function makeCampfire() {
+  const g = group();
+  for (let i = 0; i < 4; i++) addPart(g, G.cyl(0.1, 0.1, 1.1, 6), 0x7a5232, [0, 0.12, 0], { rot: [Math.PI / 2, i * Math.PI / 4, 0], ow: 0.02 });
+  const f1 = new THREE.Mesh(G.cone(0.35, 0.9, 6), new THREE.MeshBasicMaterial({ color: 0xffa040 }));
+  const f2 = new THREE.Mesh(G.cone(0.2, 0.6, 6), new THREE.MeshBasicMaterial({ color: 0xfff0a0 }));
+  f1.position.y = 0.5; f2.position.y = 0.45; g.add(f1, f2); g.userData.flame = [f1, f2];
+  for (let i = 0; i < 8; i++) addPart(g, G.sph(0.18, 6, 5), 0x9a9286, [Math.cos(i * 0.785) * 0.75, 0.1, Math.sin(i * 0.785) * 0.75], { outline: false });
+  return g;
+}
+// 몬스터 거점: 선돌 고리와 깃발. 정화하면 깃발이 금색으로 바뀐다
+export function makeCamp() {
+  const g = group();
+  for (let i = 0; i < 7; i++) { const a = i / 7 * Math.PI * 2, h = 2 + Math.random() * 1.6; addPart(g, G.box(0.9, h, 0.6), 0xb7ae9c, [Math.cos(a) * 9, h / 2, Math.sin(a) * 9], { rot: [0, -a, (Math.random() - 0.5) * 0.2], ow: 0.04 }); }
+  addPart(g, G.cyl(0.08, 0.08, 5, 6), 0x5a3a20, [0, 2.5, 0], { ow: 0.02 });
+  const flag = addPart(g, G.box(1.6, 1.0, 0.05), 0x9a2f2f, [0.82, 4.4, 0], { ow: 0.02 });
+  g.userData.flag = flag;
+  const fire = makeCampfire(); fire.position.set(2.2, 0, 1.4); g.add(fire); g.userData.fire = fire;
+  return g;
+}
+export function makeLair(final) {
+  const g = group();
+  const n = final ? 12 : 9, R = final ? 21 : 17;
+  for (let i = 0; i < n; i++) {
+    const a = i / n * Math.PI * 2, h = final ? 7 + (i % 3) * 2 : 4 + (i % 2) * 2;
+    addPart(g, G.box(1.6, h, 1.6), final ? 0x9a8f80 : PALETTE.stone, [Math.cos(a) * R, h / 2, Math.sin(a) * R], { rot: [0, -a, 0], ow: 0.06 });
+    if (i % 2 === 0) addPart(g, G.box(1.8, 0.6, 1.8), PALETTE.moss, [Math.cos(a) * R, h + 0.2, Math.sin(a) * R], { rot: [0, -a, 0], outline: false });
+  }
+  return g;
+}
+export function makeBarrier(r) {
+  const g = new THREE.Group();
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 14, 48, 1, true), new THREE.MeshBasicMaterial({ color: 0xb07de0, transparent: true, opacity: 0.25, side: THREE.DoubleSide, depthWrite: false }));
+  m.position.y = 7; g.add(m);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(r, 0.15, 6, 64), new THREE.MeshBasicMaterial({ color: 0xd8b0ff }));
+  ring.rotation.x = Math.PI / 2; ring.position.y = 0.2; g.add(ring);
+  g.userData.wall = m; return g;
+}
+// 기믹: 상승 기류
+export function makeJumpPad() {
+  const g = new THREE.Group();
+  const base = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.6, 32), new THREE.MeshBasicMaterial({ color: 0xe8fff0, transparent: true, opacity: 0.7, side: THREE.DoubleSide }));
+  base.rotation.x = -Math.PI / 2; base.position.y = 0.05; g.add(base);
+  const sp = new THREE.Group(); g.add(sp);
+  for (let i = 0; i < 6; i++) { const c = new THREE.Mesh(G.cone(0.12, 0.6, 5), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7 })); const a = i / 6 * Math.PI * 2; c.position.set(Math.cos(a) * 1.1, 0.4 + i * 0.35, Math.sin(a) * 1.1); sp.add(c); }
+  g.userData.spin = sp; return g;
+}
+// 기믹: 폭발 버섯
+export function makeBoomShroom() {
+  const g = group();
+  addPart(g, G.cyl(0.22, 0.3, 0.6), 0xf2e6cf, [0, 0.3, 0]);
+  const cap = addPart(g, G.sph(0.65, 12, 10), 0xff8a3a, [0, 0.9, 0], { scale: [1, 0.75, 1], mat: { emissive: 0x5a2000 } });
+  for (const [x, y, z] of [[0.35, 1.2, 0.3], [-0.4, 1.1, 0.2], [0, 1.3, -0.35], [0.1, 1.0, 0.55]]) addPart(g, G.sph(0.09, 6, 5), 0xfff3a0, [x, y, z], { outline: false, mat: { emissive: 0x806020 } });
+  g.userData.cap = cap; return g;
+}
+// 기믹: 번개 수정
+export function makeLCrystal() {
+  const g = group();
+  addPart(g, G.cyl(0.9, 1.1, 0.5, 8), 0x9a9286, [0, 0.25, 0], { ow: 0.04 });
+  const c = addPart(g, new THREE.OctahedronGeometry(0.8), 0x8fd8ff, [0, 2.0, 0], { scale: [0.7, 1.6, 0.7], mat: { emissive: 0x2a7aa8 }, ow: 0.04 });
+  g.userData.core = c; return g;
+}
+// 기믹: 치유의 샘
+export function makeSpring() {
+  const g = group();
+  const w = new THREE.Mesh(new THREE.CircleGeometry(2.6, 28), new THREE.MeshBasicMaterial({ color: 0x8fdcff, transparent: true, opacity: 0.85 }));
+  w.rotation.x = -Math.PI / 2; w.position.y = 0.06; g.add(w); g.userData.water = w;
+  for (let i = 0; i < 12; i++) addPart(g, G.sph(0.4, 7, 5), 0xc9c0ad, [Math.cos(i * 0.52) * 2.9, 0.12, Math.sin(i * 0.52) * 2.9], { scale: [1, 0.5, 1], ow: 0.02 });
+  return g;
+}
+// 기믹: 가시 덤불
+export function makeThornBush(r) {
+  const g = group();
+  for (let i = 0; i < 7; i++) { const a = Math.random() * 6.28, d = Math.random() * r * 0.7; addPart(g, G.sph(0.6 + Math.random() * 0.5, 7, 5), 0x4a6a3a, [Math.cos(a) * d, 0.4, Math.sin(a) * d], { ow: 0.03 }); }
+  for (let i = 0; i < 14; i++) { const a = Math.random() * 6.28, d = Math.random() * r * 0.8; addPart(g, G.cone(0.07, 0.6, 4), 0x2e3a22, [Math.cos(a) * d, 0.7, Math.sin(a) * d], { rot: [Math.random() - 0.5, 0, Math.random() - 0.5], outline: false }); }
+  return g;
+}
+export function makeFlowers(points) {
+  const geo = G.sph(0.09, 5, 4);
+  const mesh = new THREE.InstancedMesh(geo, new THREE.MeshBasicMaterial({ color: 0xffffff }), points.length);
+  const m4 = new THREE.Matrix4(), cols = [0xffffff, 0xffe066, 0xf6a6c8, 0xb8a6ff];
+  points.forEach(([x, z], i) => { m4.makeTranslation(x, 0.3, z); mesh.setMatrixAt(i, m4); mesh.setColorAt(i, new THREE.Color(cols[i % 4])); });
+  return mesh;
+}
+
+// ---------- 무기 디자인 (종류 look 0~2, 등급 r 0~4) ----------
+const METAL = [0xc8ced4, 0xc8ced4, 0xd6dde4, 0xdcd6ee, 0xf0c060];
+function gemMat(r) { const c = new THREE.Color(D_RC[r]); return { emissive: r >= 2 ? c.clone().multiplyScalar(r >= 3 ? 0.6 : 0.35).getHex() : 0x000000 }; }
+const D_RC = [0xf4f1e8, 0x7ccf6a, 0x5fa8e8, 0xb07de0, 0xf0a040];
+// 검(손잡이 원점, 날은 +y)
+function makeSword(look, r) {
+  const g = group();
+  const metal = METAL[r];
+  if (look === 0) addPart(g, G.box(0.06, 0.9, 0.016), metal, [0, 0.55, 0], { ow: 0.008 });
+  else if (look === 1) { addPart(g, G.box(0.11, 0.78, 0.02), metal, [0, 0.49, 0], { ow: 0.008 }); addPart(g, G.cone(0.055, 0.12, 4), metal, [0, 0.94, 0], { scale: [1, 1, 0.3], ow: 0.006 }); }
+  else for (let i = 0; i < 5; i++) addPart(g, G.box(0.065, 0.19, 0.016), metal, [Math.sin(i * 0.22) * 0.12, 0.17 + i * 0.17, 0], { rot: [0, 0, -i * 0.12], ow: 0.006 });
+  addPart(g, G.box(look === 2 ? 0.16 : 0.24, 0.045, 0.05), r === 4 ? 0xf0c060 : 0xa07a40, [0, 0.08, 0], { ow: 0.006 });
+  addPart(g, G.cyl(0.022, 0.022, 0.16, 6), 0x5a3a20, [0, -0.02, 0], { ow: 0.006 });
+  addPart(g, G.sph(0.035, 8, 6), D_RC[r], [0, -0.11, 0], { outline: false, mat: gemMat(r) });
+  return g;
+}
+// 방패(앞면 +z)
+function makeShield(look, r) {
+  const g = group();
+  const wood = [0x8a5a32, 0x7a5a8a, 0x9a6a3a][look], rim = METAL[r];
+  if (look === 0) { addPart(g, G.cyl(0.26, 0.26, 0.05, 20), wood, [0, 0, 0], { rot: [Math.PI / 2, 0, 0], ow: 0.01 }); addPart(g, G.tor(0.26, 0.02), rim, [0, 0, 0.02], { outline: false }); }
+  else if (look === 1) { addPart(g, G.box(0.3, 0.3, 0.05), wood, [0, 0.06, 0], { rot: [0, 0, Math.PI / 4], scale: [1, 1.5, 1], ow: 0.01 }); addPart(g, G.box(0.04, 0.5, 0.06), rim, [0, 0.02, 0.01], { outline: false }); }
+  else { addPart(g, G.cyl(0.17, 0.17, 0.05, 16), rim, [0, 0, 0], { rot: [Math.PI / 2, 0, 0], ow: 0.01 }); addPart(g, G.cone(0.05, 0.12, 6), rim, [0, 0, 0.07], { rot: [Math.PI / 2, 0, 0], outline: false }); }
+  addPart(g, G.sph(0.05, 8, 6), D_RC[r], [0, look === 1 ? 0.12 : 0.02, 0.035], { outline: false, mat: gemMat(r) });
+  return g;
+}
+// 지팡이(손잡이 원점, 끝은 +y, userData.tip 은 마법이 나오는 자리)
+function makeStaff(cls, look, r) {
+  const g = group();
+  const wood = cls === 'mage' ? [0x6a4a2e, 0x2e2a3a, 0x4a3a5a][look] : [0x8a6a4a, 0xd6dde4, 0xf4f1e8][look];
+  const len = cls === 'cleric' && look === 1 ? 0.7 : 1.25;
+  if (cls === 'mage' && look === 0) for (let i = 0; i < 4; i++) addPart(g, G.cyl(0.026, 0.032, len / 4 + 0.02, 6), wood, [Math.sin(i * 1.9) * 0.02, -0.3 + i * len / 4 + len / 8, 0], { rot: [0, 0, Math.sin(i * 1.3) * 0.12], ow: 0.006 });
+  else addPart(g, G.cyl(0.025, 0.03, len, 7), wood, [0, len / 2 - 0.3, 0], { ow: 0.006 });
+  const top = len - 0.3, tip = new THREE.Object3D(); tip.position.set(0, top + 0.1, 0); g.add(tip); g.userData.tip = tip;
+  const gem = D_RC[r];
+  if (cls === 'mage') {
+    if (look === 0) { for (let i = 0; i < 3; i++) addPart(g, G.cone(0.02, 0.14, 4), wood, [Math.cos(i * 2.1) * 0.06, top + 0.04, Math.sin(i * 2.1) * 0.06], { rot: [Math.sin(i * 2.1) * 0.5, 0, -Math.cos(i * 2.1) * 0.5], outline: false }); addPart(g, G.sph(0.06, 10, 8), gem, [0, top + 0.08, 0], { outline: false, mat: gemMat(Math.max(r, 2)) }); }
+    else if (look === 1) addPart(g, new THREE.OctahedronGeometry(0.07), gem, [0, top + 0.12, 0], { scale: [0.8, 1.8, 0.8], mat: gemMat(Math.max(r, 2)), ow: 0.006 });
+    else { addPart(g, G.tor(0.09, 0.012), r === 4 ? 0xf0c060 : 0xb8c0c8, [0, top + 0.1, 0], { outline: false }); const rune = addPart(g, new THREE.OctahedronGeometry(0.04), gem, [0, top + 0.1, 0], { outline: false, mat: gemMat(Math.max(r, 2)) }); g.userData.spin = rune; }
+  } else {
+    if (look === 0) { addPart(g, G.tor(0.08, 0.014), r === 4 ? 0xf0c060 : 0xd4b04a, [0, top + 0.1, 0], { outline: false }); addPart(g, G.sph(0.045, 10, 8), gem, [0, top + 0.1, 0], { outline: false, mat: gemMat(Math.max(r, 1)) }); }
+    else if (look === 1) { addPart(g, G.sph(0.08, 10, 8), METAL[r], [0, top + 0.06, 0], { ow: 0.006 }); for (let i = 0; i < 5; i++) addPart(g, G.cone(0.02, 0.08, 4), 0xd4b04a, [Math.cos(i * 1.26) * 0.07, top + 0.13, Math.sin(i * 1.26) * 0.07], { outline: false }); addPart(g, G.sph(0.03, 8, 6), gem, [0, top + 0.15, 0], { outline: false, mat: gemMat(Math.max(r, 1)) }); }
+    else { for (const s of [-1, 1]) addPart(g, G.cone(0.05, 0.22, 4), 0xffffff, [s * 0.09, top + 0.05, 0], { rot: [0, 0, s * 1.1], scale: [1, 1, 0.3], ow: 0.006 }); addPart(g, new THREE.OctahedronGeometry(0.05), gem, [0, top + 0.12, 0], { outline: false, mat: gemMat(Math.max(r, 1)) }); }
+  }
+  return g;
+}
+// 활: 바깥 그룹 기준 시위 끝점 ±y, 활대는 앞(−z)으로 휜다. userData.string 을 −y 로 옮기면 당겨진다
+function makeBow(look, r) {
+  const outer = group(), inner = group(); outer.add(inner); inner.userData = outer.userData;
+  const R = [0.32, 0.46, 0.36][look], wood = [0x7a5232, 0x8a6a4a, 0x5a3a2a][look];
+  addPart(inner, G.tor(R, 0.016, Math.PI), wood, [0, 0, 0], { ow: 0.006 });
+  if (look === 2) for (const s of [-1, 1]) addPart(inner, G.cone(0.02, 0.1, 4), wood, [s * R, -0.03, 0], { rot: [0, 0, s * 2.6], outline: false });
+  addPart(inner, G.sph(0.03, 8, 6), D_RC[r], [0, R, 0.02], { outline: false, mat: gemMat(r) });
+  if (r >= 3) addPart(inner, G.tor(0.035, 0.008), r === 4 ? 0xf0c060 : 0xb07de0, [0, R, 0], { rot: [Math.PI / 2, 0, 0], outline: false });
+  outer.userData.R = R;
+  const str = new THREE.Mesh(G.cyl(0.004, 0.004, R * 2, 4), new THREE.MeshBasicMaterial({ color: 0xf4efe4 }));
+  str.rotation.z = Math.PI / 2; inner.add(str); outer.userData.string = str;
+  inner.setRotationFromMatrix(new THREE.Matrix4().makeBasis(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, -1), new THREE.Vector3(-1, 0, 0)));
+  inner.position.z = R; // 손잡이(활대 가운데)가 바깥 그룹 원점에 오도록
+  return outer;
+}
+export function makeWeapon(cls, item) {
+  const look = item ? (item.look ?? 0) : 0, r = item ? item.r : 0;
+  if (cls === 'warrior') return { main: makeSword(look, r), off: makeShield(look, r) };
+  if (cls === 'archer') return { main: makeBow(look, r) };
+  return { main: makeStaff(cls, look, r) };
+}
+const SLEEVES = [0x8a6a4a, 0x9aa3ad, null];
+const CLASS_TINT = { warrior: 0xc0614a, cleric: 0xeee8f6, mage: 0x5b3f8a, archer: 0x5f8a4a };
+function sleeveColor(cls, armor) { const v = armor ? SLEEVES[armor.look ?? 0] : null; return v ?? CLASS_TINT[cls]; }
+
+// ---------- 1인칭 손과 무기 ----------
+const SKIN = 0xf1c7a0;
+export function makeViewModel(cls, weapon, armor) {
+  const g = group();
+  const L = group(), R = group(); g.add(L, R);
+  const sl = sleeveColor(cls, armor), trim = armor ? D_RC[armor.r] : 0xd8cfbf;
+  const hand = p => {
+    addPart(p, G.cyl(0.07, 0.085, 0.45, 8), sl, [0, -0.05, 0.12], { rot: [Math.PI / 2, 0, 0], ow: 0.01 });
+    addPart(p, G.cyl(0.088, 0.088, 0.05, 8), trim, [0, -0.05, -0.08], { rot: [Math.PI / 2, 0, 0], outline: false });
+    addPart(p, G.box(0.11, 0.06, 0.13), SKIN, [0, -0.05, -0.15], { ow: 0.01 });
+  };
+  hand(L); hand(R);
+  const w = makeWeapon(cls, weapon);
+  const U = g.userData;
+  if (cls === 'warrior') {
+    w.main.position.set(0, -0.02, -0.18); w.main.rotation.set(-1.0, 0, 0.55); w.main.scale.setScalar(0.78); R.add(w.main); U.blade = w.main;
+    w.off.position.set(0.02, 0.05, -0.2); w.off.rotation.set(0, 0.55, 0.12); w.off.scale.setScalar(0.85); L.add(w.off);
+    L.position.set(-0.42, -0.34, -0.55); R.position.set(0.34, -0.3, -0.5);
+  } else if (cls === 'archer') {
+    // 활은 왼손, 화살은 활(시위)에 붙어 함께 당겨진다
+    w.main.position.set(0, 0, -0.16); L.add(w.main); U.bow = w.main; U.string = w.main.userData.string;
+    const Rb = w.main.userData.R, arrow = group(); w.main.add(arrow);
+    addPart(arrow, G.cyl(0.008, 0.008, 0.62, 5), 0xc89a5a, [0, 0, Rb - 0.31], { rot: [Math.PI / 2, 0, 0], ow: 0.004 });
+    addPart(arrow, G.cone(0.02, 0.06, 4), 0xdfe5ea, [0, 0, Rb - 0.64], { rot: [-Math.PI / 2, 0, 0], ow: 0.004 });
+    for (const s of [-1, 1]) addPart(arrow, G.box(0.002, 0.03, 0.07), 0xe85a4a, [0, s * 0.012, Rb - 0.04], { outline: false });
+    U.arrow = arrow; U.bowR = Rb;
+    L.position.set(-0.3, -0.24, -0.6); R.position.set(0.3, -0.45, -0.42);
+  } else {
+    // 지팡이는 오른손에 비스듬히 세워 들고, 마법은 지팡이 끝에서 나간다
+    w.main.position.set(0, -0.05, -0.16); w.main.rotation.set(-0.6, 0, 0.22); w.main.scale.setScalar(0.8); R.add(w.main); U.staff = w.main; U.tip = w.main.userData.tip;
+    const glow = new THREE.Mesh(G.sph(0.05, 12, 10), new THREE.MeshBasicMaterial({ color: cls === 'mage' ? 0xbfa8ff : 0xfff3a0, transparent: true, opacity: 0.0, depthWrite: false }));
+    const halo = new THREE.Mesh(G.sph(0.1, 12, 10), new THREE.MeshBasicMaterial({ color: cls === 'mage' ? 0xffd08a : 0xfff8d0, transparent: true, opacity: 0.0, depthWrite: false }));
+    glow.add(halo); U.tip.add(glow); U.orb = glow; U.halo = halo;
+    const hglow = new THREE.Mesh(G.sph(0.09, 10, 8), new THREE.MeshBasicMaterial({ color: 0xfff3a0, transparent: true, opacity: 0.0, depthWrite: false }));
+    hglow.position.set(0, 0, -0.25); L.add(hglow); U.glow = hglow;
+    L.position.set(-0.34, -0.36, -0.5); R.position.set(0.28, -0.3, -0.5);
+  }
+  L.scale.setScalar(0.62); R.scale.setScalar(0.62);
+  U.L = L; U.R = R; U.base = { L: L.position.clone(), R: R.position.clone() };
+  return g;
+}
+
+// ---------- 3인칭 동료 모습 ----------
+export function makeAvatar(cls, weapon, armor) {
+  const g = group();
+  const body = CLASS_TINT[cls], sl = sleeveColor(cls, armor);
+  const legL = addPart(g, G.box(0.18, 0.7, 0.2), 0x4a3f36, [-0.13, 0.35, 0]);
+  const legR = addPart(g, G.box(0.18, 0.7, 0.2), 0x4a3f36, [0.13, 0.35, 0]);
+  addPart(g, G.cyl(0.26, 0.3, 0.75, 10), sl, [0, 1.07, 0], { ow: 0.02 });
+  addPart(g, G.cone(0.42, 0.9, 10), body, [0, 1.0, -0.06], { scale: [1, 1, 0.6], ow: 0.02 });
+  addPart(g, G.sph(0.22, 12, 10), SKIN, [0, 1.62, 0], { ow: 0.02 });
+  addPart(g, G.hemi(0.24), cls === 'mage' ? 0x3d2a5e : cls === 'cleric' ? 0xf4f1e8 : 0x6a4a2e, [0, 1.65, -0.02], { ow: 0.02 });
+  if (cls === 'mage') addPart(g, G.cone(0.26, 0.5, 10), 0x3d2a5e, [0, 1.95, -0.02], { ow: 0.02 });
+  for (const x of [-0.08, 0.08]) addPart(g, G.sph(0.03, 6, 5), 0x2a2230, [x, 1.64, 0.2], { outline: false });
+  const armR = new THREE.Group(), armL = new THREE.Group(); armR.position.set(0.34, 1.35, 0); armL.position.set(-0.34, 1.35, 0); g.add(armR, armL);
+  const a1 = group(); armR.add(a1); addPart(a1, G.box(0.13, 0.55, 0.13), sl, [0, -0.25, 0]); a1.userData = g.userData;
+  const a2 = group(); armL.add(a2); addPart(a2, G.box(0.13, 0.55, 0.13), sl, [0, -0.25, 0]); a2.userData = g.userData;
+  const w = makeWeapon(cls, weapon);
+  const s = 1.25;
+  w.main.scale.setScalar(s);
+  if (cls === 'archer') { w.main.position.set(0, -0.52, 0.12); armL.add(w.main); }
+  else { w.main.position.set(0, -0.52, 0.05); w.main.rotation.x = cls === 'warrior' ? 1.2 : 0.2; armR.add(w.main); }
+  if (w.off) { w.off.scale.setScalar(s); w.off.position.set(-0.05, -0.4, 0.15); armL.add(w.off); }
+  g.userData.armR = armR; g.userData.armL = armL; g.userData.legs = [legL, legR];
   return g;
 }
 
@@ -345,62 +573,6 @@ export function makeBoss(key) {
       g.userData.crystals = cr; break;
     }
   }
-  return g;
-}
-
-// ---------- 1인칭 손과 무기 ----------
-const SKIN = 0xf1c7a0;
-export function makeViewModel(cls) {
-  const g = group();
-  const L = group(), R = group(); g.add(L, R); g.userData.L = L; g.userData.R = R;
-  const sleeve = { warrior: 0x8a6a4a, cleric: 0xeee8f6, mage: 0x5b3f8a, archer: 0x6b4f35 }[cls];
-  const hand = (p, x) => { addPart(p, G.cyl(0.07, 0.085, 0.45, 8), sleeve, [x, -0.05, 0.12], { rot: [Math.PI / 2, 0, 0], ow: 0.01 }); addPart(p, G.box(0.11, 0.06, 0.13), SKIN, [x, -0.05, -0.15], { ow: 0.01 }); };
-  if (cls === 'warrior') {
-    hand(L, 0); hand(R, 0);
-    const shield = group(); L.add(shield);
-    addPart(shield, G.box(0.36, 0.44, 0.05), 0x8a5a32, [0, 0, 0], { ow: 0.012 });
-    addPart(shield, G.box(0.4, 0.04, 0.06), 0xb8c0c8, [0, 0.22, 0], { outline: false });
-    addPart(shield, G.box(0.4, 0.04, 0.06), 0xb8c0c8, [0, -0.22, 0], { outline: false });
-    addPart(shield, G.sph(0.04, 8, 6), 0xd6dbe0, [0, 0, 0.03], { outline: false });
-    shield.position.set(0.02, 0.05, -0.2); shield.rotation.set(0, 0.55, 0.12);
-    const blade = group(); R.add(blade);
-    addPart(blade, G.box(0.05, 0.7, 0.015), 0xe8eef2, [0, 0.42, 0], { ow: 0.008 });
-    addPart(blade, G.box(0.2, 0.04, 0.04), 0xb08a40, [0, 0.06, 0], { ow: 0.006 });
-    addPart(blade, G.cyl(0.02, 0.02, 0.14, 6), 0x5a3a20, [0, -0.04, 0], { ow: 0.006 });
-    blade.position.set(0, -0.02, -0.18); blade.rotation.set(-1.0, 0, 0.55);
-    L.position.set(-0.42, -0.34, -0.55); R.position.set(0.34, -0.3, -0.5);
-    g.userData.blade = blade;
-  } else if (cls === 'cleric') {
-    hand(L, 0); hand(R, 0);
-    addPart(R, G.cyl(0.02, 0.025, 1.1, 6), 0x7a5a3a, [0, 0.25, -0.18], { ow: 0.006 });
-    addPart(R, G.box(0.12, 0.12, 0.12), 0xd4b04a, [0, 0.82, -0.18], { ow: 0.006 });
-    addPart(R, new THREE.OctahedronGeometry(0.06), 0x8fd8ff, [0, 0.82, -0.18], { outline: false, mat: { emissive: 0x3a8ac0 } });
-    const glow = new THREE.Mesh(G.sph(0.11, 10, 8), new THREE.MeshBasicMaterial({ color: 0xfff3a0, transparent: true, opacity: 0.0 }));
-    glow.position.set(0, 0, -0.25); L.add(glow); g.userData.glow = glow;
-    L.position.set(-0.3, -0.27, -0.48); R.position.set(0.32, -0.32, -0.45);
-  } else if (cls === 'mage') {
-    hand(L, 0); hand(R, 0);
-    const orb = new THREE.Mesh(G.sph(0.05, 12, 10), new THREE.MeshBasicMaterial({ color: 0xbfa8ff, transparent: true, opacity: 0.95 }));
-    const halo = new THREE.Mesh(G.sph(0.08, 12, 10), new THREE.MeshBasicMaterial({ color: 0xffd08a, transparent: true, opacity: 0.35, depthWrite: false }));
-    orb.add(halo); orb.position.set(0, 0.08, -0.3); R.add(orb); g.userData.orb = orb;
-    L.position.set(-0.3, -0.3, -0.5); R.position.set(0.3, -0.3, -0.5);
-  } else {
-    hand(L, 0); hand(R, 0);
-    // 활: 반원(끝점 ±x, 휜 쪽 +y)을 세워서 휜 쪽이 앞(−z)을 향하게 돌린다. 시위는 두 끝점을 잇는 선.
-    const bow = group(); L.add(bow);
-    addPart(bow, G.tor(0.36, 0.018, Math.PI), 0x7a5232, [0, 0, 0], { ow: 0.006 });
-    const str = new THREE.Mesh(G.cyl(0.004, 0.004, 0.72, 4), new THREE.MeshBasicMaterial({ color: 0xf4efe4 }));
-    str.rotation.z = Math.PI / 2; bow.add(str); g.userData.string = str;
-    bow.setRotationFromMatrix(new THREE.Matrix4().makeBasis(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, -1), new THREE.Vector3(-1, 0, 0)));
-    bow.rotateY(0.25); bow.position.set(0, 0, 0.1);
-    const arrow = group(); R.add(arrow);
-    addPart(arrow, G.cyl(0.008, 0.008, 0.62, 5), 0xc89a5a, [0, 0, -0.22], { rot: [Math.PI / 2, 0, 0], ow: 0.004 });
-    addPart(arrow, G.cone(0.02, 0.06, 4), 0xdfe5ea, [0, 0, -0.55], { rot: [-Math.PI / 2, 0, 0], ow: 0.004 });
-    g.userData.arrow = arrow;
-    L.position.set(-0.12, -0.2, -0.55); R.position.set(0.08, -0.22, -0.35);
-  }
-  L.scale.setScalar(0.62); R.scale.setScalar(0.62);
-  g.userData.base = { L: L.position.clone(), R: R.position.clone() };
   return g;
 }
 

@@ -204,7 +204,13 @@ export const AFFIXES = {
   dr: { name: '받는 피해', min: 0.02, max: 0.06, f: 'neg' },
 };
 
-export const WEAPON_NAMES = { warrior: '검과 방패', cleric: '지팡이', mage: '마법서', archer: '활' };
+// 무기·갑옷 디자인: look 번호마다 모양이 다르고, 등급마다 색과 빛이 다르다
+export const WEAPON_LOOKS = {
+  warrior: ['롱소드와 원형 방패', '브로드소드와 연 방패', '곡도와 버클러'],
+  cleric: ['순례자의 지팡이', '성광의 홀', '천사의 지팡이'],
+  mage: ['떡갈나무 지팡이', '수정 지팡이', '룬 지팡이'],
+  archer: ['사냥꾼의 단궁', '장궁', '곡궁'],
+};
 export const ARMOR_NAMES = ['가죽 갑옷', '사슬 갑옷', '여행자 로브'];
 export const TRINKET_NAMES = ['반지', '목걸이', '부적'];
 export const RARITY_PREFIX = ['낡은', '쓸 만한', '빛나는', '영웅의', '전설의'];
@@ -225,7 +231,7 @@ export const UNIQUES = {
 };
 
 // 방 템플릿: 장애물(기둥·바위) 원 목록 [x, z, 반지름, 종류]
-export const ROOMS = [
+export const _ROOMS_V1 = [
   { name: '무너진 회랑', obs: [[-8, -6, 1, 'pillar'], [-8, 2, 1, 'pillar'], [8, -6, 1, 'pillar'], [8, 2, 1, 'pillar'], [0, 9, 1.6, 'rock']] },
   { name: '세 바위 언덕', obs: [[-6, 4, 2, 'rock'], [7, 5, 1.8, 'rock'], [0, -7, 2.2, 'rock']] },
   { name: '돌기둥 숲', obs: [[-10, 0, 0.9, 'pillar'], [-5, 7, 0.9, 'pillar'], [5, 7, 0.9, 'pillar'], [10, 0, 0.9, 'pillar'], [5, -7, 0.9, 'pillar'], [-5, -7, 0.9, 'pillar']] },
@@ -235,5 +241,42 @@ export const ROOMS = [
 ];
 
 export const ARENA_R = 22;
+
+// ===== 오픈 월드 =====
+export const WORLD_R = 125;
+export const REGIONS = [
+  { name: '꽃 초원', tint: 0xa8d68f, pool: ['mushroom', 'petal', 'bat', 'vine', 'wolf', 'roller'] },
+  { name: '유적 언덕', tint: 0xb9cf95, pool: ['knight', 'rarcher', 'roller', 'shadow', 'bat', 'golem'] },
+  { name: '버섯 숲', tint: 0x93c47d, pool: ['mushroom', 'shaman', 'vine', 'golem', 'petal', 'knight'] },
+  { name: '바람 절벽', tint: 0xa3cfa0, pool: ['wolf', 'bat', 'roller', 'golem', 'rarcher', 'shadow'] },
+  { name: '수정 호수', tint: 0x9ccfae, pool: ['turtle', 'petal', 'shadow', 'rarcher', 'shaman', 'knight'] },
+];
+export const tierAt = d => Math.max(1, Math.min(5, 1 + Math.floor((d - 18) / 22)));
+export const DANGER_EVERY = 240; // 초마다 위험도 +1
+export const SEAL_CAMPS = 3; // 최종 보스 봉인 해제에 필요한 거점 수
+export const PARTY_MAX = 4;
+
+// ===== 레벨업 능력치 =====
+export const STATS = {
+  atk: { name: '공격', d: '모든 피해 +2%' },
+  vit: { name: '체력', d: '최대 체력 +4%' },
+  agi: { name: '민첩', d: '이동속도 +1%, 대시 쿨 −2%' },
+  crt: { name: '치명', d: '치명타 확률 +1%, 치명 피해 +3%' },
+  spr: { name: '정신', d: '스킬 쿨 −1.5%, 회복량 +3%' },
+};
+export const STAT_IDS = Object.keys(STATS);
+export const POINTS_PER_LEVEL = 3;
+export const RESPEC_COST = 50;
+// 한 능력치에 10점, 20점을 찍으면 열리는 특성
+export const TRAITS = {
+  atk: [{ name: '맹공', d: '적을 처치하면 3초간 피해 +15%' }, { name: '파괴자', d: '정예·보스에게 피해 +15%' }],
+  vit: [{ name: '철갑', d: '체력 50% 이하일 때 받는 피해 −10%' }, { name: '불사', d: '한 판에 1번, 쓰러질 피해를 받으면 체력 1로 버팀' }],
+  agi: [{ name: '질풍', d: '대시 후 1초간 이동속도 +30%' }, { name: '잔상', d: '대시 1회 추가 충전' }],
+  crt: [{ name: '급소', d: '치명타가 터지면 3초간 치명타 확률 +10%' }, { name: '처형인', d: '치명타가 체력 30% 이하 적을 즉시 처치 (보스 제외)' }],
+  spr: [{ name: '명상', d: '스킬을 쓰면 3초간 초당 체력 1% 회복' }, { name: '시간술사', d: 'Q를 쓰면 대시 쿨 초기화' }],
+};
+// 봇이 능력치를 찍는 비율
+export const BOT_STAT_PREF = { warrior: { vit: 2, atk: 1 }, cleric: { spr: 2, vit: 1 }, mage: { atk: 2, spr: 1 }, archer: { crt: 2, agi: 1 } };
+export const BOT_NAMES = ['바람이', '들꽃이', '풀피리', '돌멩이', '산들이', '이슬이'];
 export const LEVEL_CAP = 10;
 export const xpForLevel = L => Math.round(100 * Math.pow(L, 1.5));
