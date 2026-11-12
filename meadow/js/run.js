@@ -6,7 +6,7 @@ import * as UI from './ui.js';
 import * as N from './net.js';
 import { G, scene, camera, vmScene, vmCam, renderer, resize, isHost, isClient, rnd, pick, clamp, d2, fx, applyFx, P3, nextId, sfx, writeSave, loadSave, freePoints, lowGfx,
   getShake, decayShake, updateVisuals, clearVisuals, burst, isTouch } from './core.js';
-import { genWorld, buildWorld, clearWorld, updateWorldVisual, regionAt, tierAtPos } from './world.js';
+import { genWorld, buildWorld, clearWorld, updateWorldVisual, regionAt, tierAtPos, addToWorld } from './world.js';
 import * as S from './sim.js';
 
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -106,15 +106,16 @@ function beginRun(cfg, youId) {
 }
 function resetRunState() {
   for (const e of [...G.enemies]) S.removeEnemy(e);
-  for (const a of G.actors) if (a.model) scene.remove(a.model);
-  for (const l of G.loot) scene.remove(l.mesh);
+  for (const a of G.actors) if (a.model) A.dispose(a.model);
+  for (const l of G.loot) A.dispose(l.mesh);
   for (const arr of [G.actors, G.enemies, G.projectiles, G.eprojs, G.zones, G.teles, G.loot]) arr.length = 0;
   clearVisuals(); clearWorld(); UI.bossBar(null); UI.blur(false);
-  if (G.run?.portal) scene.remove(G.run.portal);
+  if (G.run?.portal) A.dispose(G.run.portal);
   G.run = null; G.me = null;
 }
 
 // ================= 거점·둥지·봉인 (방장) =================
+const ENEMY_CAP = 55; // 한 번에 살아 있는 몬스터 수 상한 (위험도는 수 대신 세기로 오른다)
 function hostWorld(dt, wdt) {
   const run = G.run, W = G.world.W;
   run.t += dt; run.dangerT += dt;
@@ -135,7 +136,7 @@ function hostWorld(dt, wdt) {
   if (run.roamT <= 0) {
     run.roamT = 4;
     const groups = new Set(G.enemies.filter(e => e.roam).map(e => e.group)).size;
-    if (groups < 10 + run.danger) for (let k = 0; k < 20; k++) {
+    if (groups < Math.min(14, 9 + run.danger) && G.enemies.length < ENEMY_CAP) for (let k = 0; k < 20; k++) {
       const ang = Math.random() * Math.PI * 2, r = rnd(26, D.WORLD_R - 6), p = V3(Math.cos(ang) * r, 0, Math.sin(ang) * r);
       if (G.actors.some(a => d2(a.pos, p) < 38) || G.camps.some(c => d2(c, p) < 16) || d2(W.lairs.final, p) < 26 || d2(W.lairs.mid, p) < 22) continue;
       const tier = tierAtPos(p.x, p.z), pool = D.REGIONS[regionAt(p.x, p.z)].pool.filter(k2 => D.MONSTERS[k2].floor <= tier + 1), key = pick(pool), m = D.MONSTERS[key];
@@ -175,7 +176,7 @@ function checkSeal() {
   if (!G.world.seal && run.campsCleared >= D.SEAL_CAMPS && run.midDead) { G.world.seal = true; fx('banner', { text: '봉인이 풀렸다 — 북쪽 고대 유적으로!', dur: 3 }); fx('sfx', { k: 'portal' }); }
 }
 function spawnChest(x, z, tier) {
-  const m = A.makeChest(); m.position.set(x, 0, z + 2); scene.add(m);
+  const m = A.bakeGroup(A.makeChest()); m.position.set(x, 0, z + 2); addToWorld(m);
   const id = 100 + G.chests.length; G.chests.push({ id, x, z: z + 2, tier, pos: m.position, mesh: m, opened: false, seen: true, camp: true });
   if (G.net) G.net.room.broadcast({ t: 'chest', id, x, z: z + 2, tier });
 }
@@ -212,7 +213,7 @@ function spawnPortal(x, z) { const p = A.makePortal(); p.position.set(x, 1.7, z)
 S.hooks.kill = (e, by) => onEnemyKilled(e, by);
 S.hooks.bossKilled = e => onBossKilled(e);
 S.hooks.down = () => {};
-S.hooks.summon = (key, p) => { const sc = scaleFor(4); S.spawnEnemy(key, p, { ...sc, aggro: 40, camp: -1 }); };
+S.hooks.summon = (key, p) => { if (G.enemies.length >= ENEMY_CAP + 10) return; const sc = scaleFor(4); S.spawnEnemy(key, p, { ...sc, aggro: 40, camp: -1 }); };
 
 // ================= 카드 =================
 function offerAll(tier, chest) {
@@ -223,7 +224,7 @@ function offerAll(tier, chest) {
   }
 }
 function rollTier(a, tier, minTier, legendMult) {
-  const odds = [...D.CARD_TIER_ODDS[Math.min(5, tier - 1)]];
+  const odds = [...D.CARD_TIER_ODDS[clamp((tier || 1) - 1, 0, 5)]];
   const s = a.S.cardsense; odds[0] -= s; odds[1] += s;
   odds[3] *= legendMult; odds[0] -= odds[3] * (legendMult - 1) / legendMult;
   let x = Math.random(), t = 0; for (; t < 3; t++) { if ((x -= odds[t]) < 0) break; }
@@ -316,7 +317,7 @@ export async function hostLobby() {
     net.room = await N.hostRoom({
       onJoin: id => { net.clients.set(id, { peer: id, name: '참가자', cls: 'warrior', lv: 1 }); pushLobby(); },
       onMsg: (id, m) => hostMsg(id, m),
-      onLeave: id => { net.clients.delete(id); const a = G.actors.find(x => x.peer === id); if (a && G.mode === 'run') { a.kind = 'bot'; a.bot = { t: 0, hold: 0, slot: 3 }; a.name += ' (봇)'; fx('banner', { text: `참가자가 나가 봇이 이어받는다`, dur: 2 }); } pushLobby(); },
+      onLeave: id => { net.clients.delete(id); const a = G.actors.find(x => x.peer === id); if (a && G.mode === 'run') { a.choosing = false; a.kind = 'bot'; a.bot = { t: 0, hold: 0, slot: 3 }; a.name += ' (봇)'; fx('banner', { text: `참가자가 나가 봇이 이어받는다`, dur: 2 }); } pushLobby(); },
     });
     G.net = net; G.mode = 'lobby'; pushLobby();
   } catch (e) { UI.lobbyStatus(`방을 만들지 못했어요: ${e.message || e}`); G.net = null; }
@@ -360,12 +361,12 @@ function clientMsg(m) {
   else if (m.t === 'f') for (const [k, d] of m.l) applyFx(k, d);
   else if (m.t === 'cards') queueCards(m.tier, m.chest);
   else if (m.t === 'drop') makeLocalLoot(m.p, m.o);
-  else if (m.t === 'chest') { const mm = A.makeChest(); mm.position.set(m.x, 0, m.z); scene.add(mm); G.chests.push({ id: m.id, x: m.x, z: m.z, tier: m.tier, pos: mm.position, mesh: mm, opened: false, seen: true, camp: true }); }
+  else if (m.t === 'chest') { const mm = A.bakeGroup(A.makeChest()); mm.position.set(m.x, 0, m.z); addToWorld(mm); G.chests.push({ id: m.id, x: m.x, z: m.z, tier: m.tier, pos: mm.position, mesh: mm, opened: false, seen: true, camp: true }); }
   else if (m.t === 'portal') spawnPortal(m.x, m.z);
   else if (m.t === 'end') endLocal(m.win, m.boss);
 }
 // ---- 상태 보내기 (방장 → 참가자) ----
-const EF = e => (e.elite ? 1 : 0) | (e.wind > 0 ? 2 : 0) | (e.st.freeze > 0 ? 4 : 0) | (e.state === 'hidden' ? 8 : 0) | (e.flash > 0 ? 16 : 0);
+const EF = e => (e.elite ? 1 : 0) | (e.wind > 0 || e.chg === 'wind' ? 2 : 0) | (e.st.freeze > 0 ? 4 : 0) | (e.state === 'hidden' ? 8 : 0) | (e.flash > 0 ? 16 : 0) | (e.chg === 'wind' ? 32 : e.chg === 'go' ? 64 : 0);
 function snapshot() {
   const r2 = v => Math.round(v * 100) / 100;
   return { t: 's',
@@ -375,7 +376,7 @@ function snapshot() {
       e.key === 'turtleking' ? e.model.userData.crystals.map(c => c.visible ? 1 : 0).join('') : '', r2(e.spinY || 0)]),
     p: G.props.map(p => [p.active ? 1 : 0, p.cd > 0 ? 1 : 0, Math.round(p.charge * 100), p.fuse > 0 ? 1 : 0]),
     c: G.camps.map(c => c.state[0]).join(''), ch: G.chests.map(c => c.opened ? 1 : 0).join(''),
-    w: { seal: G.world.seal, danger: G.run.danger, xp: G.run.xp, mats: G.run.mats, cc: G.run.campsCleared, md: G.run.midDead, ph: G.run.phase } };
+    w: { fz: G.run.frozen ? 1 : 0, cn: G.run.choosers || [], seal: G.world.seal, danger: G.run.danger, xp: G.run.xp, mats: G.run.mats, cc: G.run.campsCleared, md: G.run.midDead, ph: G.run.phase } };
 }
 // ---- 상태 받기 (참가자) ----
 function applySnapshot(m) {
@@ -391,7 +392,7 @@ function applySnapshot(m) {
     seen.add(r[0]); let e = G.enemies.find(x => x.id === r[0]);
     if (!e) { e = S.spawnEnemy(r[1], V3(r[2], 0, r[3]), { id: r[0], affix: r[8] ? 'tough' : null }); e.client = true; }
     e.tpos = V3(r[2], 0, r[3]); e.yaw = r[4]; e.hp = r[5] / 1000 * e.maxHp; e.vy = r[7];
-    e.wind = r[6] & 2 ? 0.25 : 0; e.windMax = 0.5; e.frozen = !!(r[6] & 4); e.flash = r[6] & 16 ? 0.05 : 0;
+    e.wind = r[6] & 2 ? 0.25 : 0; e.windMax = 0.5; e.chg = r[6] & 32 ? 'wind' : r[6] & 64 ? 'go' : null; e.frozen = !!(r[6] & 4); e.flash = r[6] & 16 ? 0.05 : 0;
     const hidden = !!(r[6] & 8); if (hidden !== (e.state === 'hidden')) { e.state = hidden ? 'hidden' : 'move'; for (const ch of e.model.children) ch.visible = hidden ? !!ch.userData.isBush : !ch.userData.isBush; }
   }
   for (const r of m.b) {
@@ -406,7 +407,7 @@ function applySnapshot(m) {
   m.p.forEach((r, i) => { const p = G.props[i]; if (!p) return; p.active = !!r[0]; p.cd = r[1] ? 1 : 0; p.charge = r[2] / 100; p.fuse = r[3] ? 0.3 : 0; });
   [...m.c].forEach((ch, i) => { if (G.camps[i]) G.camps[i].state = ch === 'c' ? 'cleared' : ch === 'a' ? 'active' : 'idle'; });
   [...m.ch].forEach((ch, i) => { if (G.chests[i]) G.chests[i].opened = ch === '1'; });
-  G.world.seal = m.w.seal; run.danger = m.w.danger; run.campsCleared = m.w.cc; run.midDead = m.w.md; run.phase = m.w.ph;
+  run.frozen = !!m.w.fz; run.choosers = m.w.cn || []; G.world.seal = m.w.seal; run.danger = m.w.danger; run.campsCleared = m.w.cc; run.midDead = m.w.md; run.phase = m.w.ph;
   run.xp = m.w.xp; run.mats = m.w.mats;
   const boss = G.enemies.find(e => e.boss && d2(e.pos, G.me.pos) < 40);
   UI.bossBar(boss ? boss.def.name : null, boss ? boss.hp / boss.maxHp : 0);
@@ -416,10 +417,11 @@ function applySnapshot(m) {
 function interact(pressed) {
   const me = G.me; let prompt = null;
   if (me.state !== 'ok') { UI.prompt(me.state === 'down' ? `쓰러짐 — 동료가 곁에 오면 살아난다 (${Math.ceil(me.downT || 0)}초)` : null); return; }
-  let near = null, nd = me.S.pickup; for (const l of G.loot) { const dd = d2(l.pos, me.pos); if (dd < nd) { nd = dd; near = l; } }
-  for (const l of [...G.loot]) if (d2(l.pos, me.pos) < 1.0) pickupLoot(l);
-  const ch = G.chests.find(c => !c.opened && d2(c.pos, me.pos) < 2.6);
-  if (near && G.loot.includes(near)) { prompt = `줍기: ${near.item.name}`; if (pressed) pickupLoot(near); }
+  const full = me.bag.length >= 20;
+  let near = null, nd = me.S.pickup; if (!full) for (const l of G.loot) { const dd = d2(l.pos, me.pos); if (dd < nd) { nd = dd; near = l; } }
+  if (!full) for (const l of [...G.loot]) if (d2(l.pos, me.pos) < 1.0) pickupLoot(l);
+  const ch = G.chests.find(c => !c.opened && d2(c.pos, me.pos) < 2.8);
+  if (near && G.loot.includes(near) && !(ch && d2(ch.pos, me.pos) < nd)) { prompt = `줍기: ${near.item.name}`; if (pressed) pickupLoot(near); }
   else if (ch) { prompt = '상자 열기'; if (pressed) { if (isClient()) G.net.conn.send({ t: 'use', k: 'chest', id: ch.id }); else openChest(ch); } }
   else if (G.run.portal && d2(G.run.portal.position, me.pos) < 2.4) { prompt = '마을로 돌아가기'; if (pressed) { if (isClient()) G.net.conn.send({ t: 'use', k: 'portal' }); else endAll(true); } }
   for (const c of G.chests) if (!c.seen && d2(c.pos, me.pos) < 25) c.seen = true;
@@ -427,7 +429,7 @@ function interact(pressed) {
 }
 function pickupLoot(l) {
   if (G.me.bag.length >= 20) { UI.toast('원정 가방이 가득 찼다'); return; }
-  G.me.bag.push(l.item); scene.remove(l.mesh); G.loot.splice(G.loot.indexOf(l), 1);
+  G.me.bag.push(l.item); A.dispose(l.mesh); G.loot.splice(G.loot.indexOf(l), 1);
   UI.toast(`<span style="color:${D.RARITY_COLORS[l.item.r]}">${l.item.name}</span> 획득`); sfx('pick');
 }
 export function bagEquip(it, on) { const me = G.me; if (on) me.bagEq[it.slot] = it.id; else delete me.bagEq[it.slot]; refreshGear(); }
@@ -573,7 +575,7 @@ function runFrame(dt) {
   const dashEv = me.input.dashT;
   aimAssist(dt);
   if (isClient()) {
-    S.updateActor(me, dt, 'client');
+    if (!G.run.frozen) S.updateActor(me, dt, 'client');
     for (const e of G.enemies) { if (e.tpos) e.pos.lerp(e.tpos, Math.min(1, dt * 12)); e.t = (e.t || 0) + dt; if (e.boss) S.bossVisual(e); else S.enemyVisual(e); }
     inT -= dt; if (inT <= 0 || dashEv) { inT = 0.05; G.net.conn.send({ t: 'i', p: P3(me.pos), y: +me.yaw.toFixed(3), pi: +me.pitch.toFixed(3), b: (me.input.lmb ? 1 : 0) | (me.input.rmb ? 2 : 0) | (me.input.q ? 4 : 0) | (me.choosing ? 8 : 0), ev: dashEv ? ['d'] : [] }); }
     // 보상 반영
@@ -581,13 +583,18 @@ function runFrame(dt) {
   } else {
     G.timeScale = me.cls === 'archer' && S.hasA(me, 'aL_breath') && me.input.rmb ? 0.5 : 1;
     let wdt = dt * G.timeScale; if (G.hitStop > 0) { G.hitStop -= dt; wdt = 0; }
-    for (const a of G.actors) {
-      if (a.kind === 'bot') { S.botThink(a, dt); S.updateActor(a, dt, 'full'); }
-      else if (a.kind === 'remote') S.updateActor(a, dt, 'remote');
-      else S.updateActor(a, dt, 'full');
+    // 누군가 카드를 고르는 동안에는 세상이 멈춘다 (시간 제한 15초)
+    const choosers = G.actors.filter(a => a.choosing && a.kind !== 'bot' && a.state !== 'dead');
+    G.run.frozen = choosers.length > 0; G.run.choosers = choosers.map(a => a.name);
+    if (!G.run.frozen) {
+      for (const a of G.actors) {
+        if (a.kind === 'bot') { S.botThink(a, dt); S.updateActor(a, dt, 'full'); }
+        else if (a.kind === 'remote') S.updateActor(a, dt, 'remote');
+        else S.updateActor(a, dt, 'full');
+      }
+      S.updateProjectiles(dt, wdt); S.updateZones(dt, wdt); S.updateTeles(wdt); S.updateProps(dt);
+      hostWorld(dt, wdt);
     }
-    S.updateProjectiles(dt, wdt); S.updateZones(dt, wdt); S.updateTeles(wdt); S.updateProps(dt);
-    hostWorld(dt, wdt);
     if (G.run && G.run.xp > G.run.xpSeen) { gainXp(G.run.xp - G.run.xpSeen); G.run.xpSeen = G.run.xp; }
     if (G.net && G.run) {
       if (G.net.fxq.length) { G.net.room.broadcast({ t: 'f', l: G.net.fxq }); G.net.fxq = []; }
@@ -607,7 +614,7 @@ function runFrame(dt) {
 export const api = { startSolo, hostLobby, joinLobby, lobbyStart, lobbyChanged, leaveNet: () => { leaveNet(); G.mode = 'town'; UI.showTown(); }, quitRun, writeSave, newItem, itemPower: S.itemPower, applyPoints, bagEquip, refreshGear,
   computeStats: () => G.me && refreshGear(), rebuildWorld: () => { buildScenery(); resize(); }, statsOf: a => a.S };
 function buildScenery() {
-  if (sky) scene.remove(sky); if (grass) scene.remove(grass);
+  if (sky) A.dispose(sky); if (grass) A.dispose(grass);
   sky = A.makeSky(); scene.add(sky);
   grass = A.makeGrass(lowGfx() ? 2600 : 7500, lowGfx() ? 44 : 60, scene.fog); scene.add(grass);
 }
@@ -623,6 +630,6 @@ function boot() {
   // 방장이 다른 탭으로 가도 게임이 멈추지 않게 (보이지 않을 땐 그리지 않고 진행만)
   try { const w = new Worker(URL.createObjectURL(new Blob(['setInterval(() => postMessage(0), 50)'])));
     w.onmessage = () => { if (document.hidden && G.net?.role === 'host' && G.run && G.me) { G.time += 0.05; runFrame(0.05); } }; } catch (e) { }
-  window.__G = G; window.__api = api; window.__S = S; // 테스트·디버그용
+  window.__G = G; window.__api = api; window.__S = S; window.__scene = scene; window.__renderer = renderer; // 테스트·디버그용
 }
 boot();

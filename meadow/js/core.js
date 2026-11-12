@@ -61,6 +61,9 @@ export function resize() {
   if (lowGfx()) { fog.near = 35; fog.far = 140; } else { fog.near = 45; fog.far = 190; }
 }
 addEventListener('resize', resize);
+// 그래픽 메모리가 바닥나 화면이 꺼지면 되살린다
+canvas.addEventListener('webglcontextlost', e => { e.preventDefault(); G.ctxLost = true; });
+canvas.addEventListener('webglcontextrestored', () => { G.ctxLost = false; resize(); });
 
 // ---------- 소리 ----------
 let actx = null;
@@ -69,7 +72,7 @@ export function sfx(kind) {
     if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
     const T = { hit: [220, 0.06, 'square'], kill: [160, 0.12, 'triangle'], hurt: [110, 0.15, 'sawtooth'], block: [520, 0.08, 'square'], card: [660, 0.15, 'sine'], chest: [440, 0.25, 'triangle'],
       levelup: [880, 0.35, 'sine'], pick: [740, 0.1, 'sine'], boss: [90, 0.6, 'sawtooth'], victory: [660, 0.6, 'triangle'], death: [80, 0.8, 'sawtooth'], portal: [520, 0.4, 'sine'], pop: [300, 0.08, 'square'],
-      break: [900, 0.2, 'triangle'], shoot: [480, 0.05, 'triangle'], cast: [360, 0.12, 'sine'], boom: [70, 0.4, 'sawtooth'], zap: [1200, 0.15, 'square'], jump: [300, 0.3, 'sine'] }[kind];
+      break: [900, 0.2, 'triangle'], shoot: [480, 0.05, 'triangle'], cast: [360, 0.12, 'sine'], boom: [70, 0.4, 'sawtooth'], zap: [1200, 0.15, 'square'], jump: [300, 0.3, 'sine'], warn: [640, 0.25, 'square'], charge: [180, 0.3, 'sawtooth'] }[kind];
     if (!T) return;
     const o = actx.createOscillator(), g = actx.createGain();
     o.type = T[2]; o.frequency.setValueAtTime(T[0], actx.currentTime);
@@ -106,13 +109,13 @@ export function applyFx(kind, d) {
       mesh.position.copy(V(d.p)); scene.add(mesh); const vel = V(d.v); mesh.lookAt(mesh.position.clone().add(vel));
       G.vfx.proj.set(d.id, { mesh, vel, grav: d.g || 0, life: d.l || 3, driven: isHost() }); break;
     }
-    case 'p-': { const v = G.vfx.proj.get(d.id); if (v) { scene.remove(v.mesh); G.vfx.proj.delete(d.id); } break; }
+    case 'p-': { const v = G.vfx.proj.get(d.id); if (v) { A.dispose(v.mesh); G.vfx.proj.delete(d.id); } break; }
     case 't+': {
       const mesh = d.k === 'l' ? A.telegraphLine(d.len, d.w, d.c) : A.telegraphCircle(d.r, d.c);
       mesh.position.set(d.p[0], 0.04, d.p[2]); if (d.rot != null) mesh.rotation.y = d.rot; scene.add(mesh);
       G.vfx.tele.set(d.id, { mesh, t: 0, dur: d.dur || 1 }); break;
     }
-    case 't-': { const v = G.vfx.tele.get(d.id); if (v) { scene.remove(v.mesh); G.vfx.tele.delete(d.id); } break; }
+    case 't-': { const v = G.vfx.tele.get(d.id); if (v) { A.dispose(v.mesh); G.vfx.tele.delete(d.id); } break; }
     case 'z+': {
       const colors = { poison: 0x8fd04a, fire: 0xff7a3a, spore: 0x9ad04a, sanct: 0xfff3a0, ice: 0x9fe6ff, rain: 0xd9c08a, trap: 0xc9a46a };
       const mesh = d.k === 'spore' ? A.cloud(d.r, colors[d.k], 0.35) : A.telegraphCircle(d.r, colors[d.k]);
@@ -120,12 +123,15 @@ export function applyFx(kind, d) {
       if (mesh.userData.fill) mesh.userData.fill.material.opacity = d.k === 'sanct' ? 0.18 : 0.3;
       scene.add(mesh); G.vfx.zone.set(d.id, { mesh, k: d.k, r: d.r, follow: d.f, p: V(d.p) }); break;
     }
-    case 'z-': { const v = G.vfx.zone.get(d.id); if (v) { scene.remove(v.mesh); G.vfx.zone.delete(d.id); } break; }
+    case 'z-': { const v = G.vfx.zone.get(d.id); if (v) { A.dispose(v.mesh); G.vfx.zone.delete(d.id); } break; }
   }
 }
+// 조각 효과는 상자 하나를 여러 번 그린다 (조각마다 새로 만들지 않음)
+const PART_MAX = 700, partMesh = A.makeParticles(PART_MAX); scene.add(partMesh);
+const _pm = new THREE.Matrix4(), _pq = new THREE.Quaternion(), _ps = new THREE.Vector3(), _pc = new THREE.Color();
 export function spawnPart(pos, vel, color, life, size = 0.08) {
-  const m = new THREE.Mesh(new THREE.BoxGeometry(size, size, size), new THREE.MeshBasicMaterial({ color }));
-  m.position.copy(pos); scene.add(m); G.parts.push({ mesh: m, vel, life });
+  if (G.parts.length >= PART_MAX) G.parts.shift();
+  G.parts.push({ pos, vel, life, size, color });
 }
 // 효과 지름길
 export const burst = (p, c, n = 10, y = 0.5) => fx('burst', { p: P3(p), c, n, y });
@@ -134,13 +140,19 @@ export const beamFx = (a, b, c, d, w) => fx('beam', { a: P3(a), b: P3(b), c, d, 
 export const shake = (a, to) => fx('shake', { a, to });
 
 export function updateVisuals(dt) {
-  for (let i = G.parts.length - 1; i >= 0; i--) { const p = G.parts[i]; p.life -= dt; p.vel.y -= 12 * dt; p.mesh.position.addScaledVector(p.vel, dt); if (p.life <= 0 || p.mesh.position.y < 0) { scene.remove(p.mesh); G.parts.splice(i, 1); } }
-  for (let i = G.fx.length - 1; i >= 0; i--) { const f = G.fx[i]; if (!f.tick(f, dt)) { scene.remove(f.mesh); G.fx.splice(i, 1); } }
-  for (const [id, v] of G.vfx.proj) { if (v.driven) continue; v.life -= dt; v.vel.y -= v.grav * dt; v.mesh.position.addScaledVector(v.vel, dt); if (v.grav) v.mesh.lookAt(v.mesh.position.clone().add(v.vel)); if (v.life <= 0 || v.mesh.position.y < -0.5) { scene.remove(v.mesh); G.vfx.proj.delete(id); } }
-  for (const [id, v] of G.vfx.tele) { v.t += dt; if (v.mesh.userData.fill) v.mesh.userData.fill.material.opacity = 0.15 + 0.4 * Math.min(1, v.t / v.dur); if (v.t > v.dur + 3) { scene.remove(v.mesh); G.vfx.tele.delete(id); } }
+  let n = 0;
+  for (let i = 0; i < G.parts.length; i++) {
+    const p = G.parts[i]; p.life -= dt; p.vel.y -= 12 * dt; p.pos.addScaledVector(p.vel, dt);
+    if (p.life <= 0 || p.pos.y < 0) continue;
+    G.parts[n] = p; _ps.setScalar(p.size); _pm.compose(p.pos, _pq, _ps); partMesh.setMatrixAt(n, _pm); partMesh.setColorAt(n, _pc.setHex(p.color)); n++;
+  }
+  G.parts.length = n; partMesh.count = n; partMesh.instanceMatrix.needsUpdate = true; partMesh.instanceColor.needsUpdate = true;
+  for (let i = G.fx.length - 1; i >= 0; i--) { const f = G.fx[i]; if (!f.tick(f, dt)) { A.dispose(f.mesh); G.fx.splice(i, 1); } }
+  for (const [id, v] of G.vfx.proj) { if (v.driven) continue; v.life -= dt; v.vel.y -= v.grav * dt; v.mesh.position.addScaledVector(v.vel, dt); if (v.grav) v.mesh.lookAt(v.mesh.position.clone().add(v.vel)); if (v.life <= 0 || v.mesh.position.y < -0.5) { A.dispose(v.mesh); G.vfx.proj.delete(id); } }
+  for (const [id, v] of G.vfx.tele) { v.t += dt; if (v.mesh.userData.fill) v.mesh.userData.fill.material.opacity = 0.15 + 0.4 * Math.min(1, v.t / v.dur); if (v.t > v.dur + 3) { A.dispose(v.mesh); G.vfx.tele.delete(id); } }
   for (const v of G.vfx.zone.values()) if (v.follow != null) { const a = G.actors.find(x => x.id === v.follow); if (a) { v.mesh.position.x = a.pos.x; v.mesh.position.z = a.pos.z; v.p.copy(a.pos); } }
 }
 export function clearVisuals() {
-  for (const m of [G.vfx.proj, G.vfx.tele, G.vfx.zone]) { for (const v of m.values()) scene.remove(v.mesh); m.clear(); }
-  for (const arr of [G.parts, G.fx]) { for (const x of arr) scene.remove(x.mesh); arr.length = 0; }
+  for (const m of [G.vfx.proj, G.vfx.tele, G.vfx.zone]) { for (const v of m.values()) A.dispose(v.mesh); m.clear(); }
+  for (const x of G.fx) A.dispose(x.mesh); G.fx.length = 0; G.parts.length = 0; partMesh.count = 0;
 }

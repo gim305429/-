@@ -108,11 +108,20 @@
   .lslot { display: flex; align-items: center; gap: 12px; background: var(--glass2); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; }
   .lslot.empty { border-style: dashed; color: var(--dim); justify-content: center; }
   .tag { font-size: 11px; color: #23180a; background: var(--gold); border-radius: 6px; padding: 1px 6px; }
+  .lpick { margin: 4px 0 12px; } .lclasses { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 6px; }
+  .lclasses button { display: flex; align-items: center; gap: 6px; padding: 7px 8px; font-size: 14px; } .lclasses button small { color: var(--dim); margin-left: auto; }
+  .lclasses button.on { border-color: var(--gold); color: var(--gold); background: rgba(233, 196, 106, .14); }
+  #lobby .bots { margin-bottom: 10px; }
   .lbtns { display: flex; gap: 10px; align-items: center; justify-content: space-between; margin-top: 8px; }
 
   /* ===== 카드: 게임은 멈추지 않는다 ===== */
   #cards { background: radial-gradient(ellipse at center, rgba(8, 16, 22, .55), rgba(8, 16, 22, .2)); flex-direction: column; gap: 14px; }
   #cards-title { color: var(--gold); font-size: 28px; text-shadow: 0 2px 10px #000; margin: 0; }
+  #cards-timer { position: relative; width: min(420px, 80vw); height: 8px; background: rgba(0, 0, 0, .5); border-radius: 99px; }
+  #cards-timer i { display: block; height: 100%; background: var(--gold); border-radius: 99px; transition: width .1s linear; }
+  #cards-timer b { position: absolute; right: -34px; top: -8px; font: 18px 'Jua'; color: var(--gold); font-weight: normal; }
+  #cards-timer.low i { background: var(--red); } #cards-timer.low b { color: var(--red); }
+  #waitcards { position: absolute; left: 50%; top: 34%; transform: translateX(-50%); background: var(--glass); border: 1px solid var(--gold); border-radius: 10px; padding: 8px 18px; font-family: 'Jua'; font-size: 17px; color: var(--gold); }
   #cards-row { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
   .card { position: relative; width: 210px; min-height: 280px; padding: 16px; border-radius: 16px; border: 1px solid var(--tc); background: linear-gradient(170deg, color-mix(in srgb, var(--tc) 25%, #142430), #0f1c24 70%); text-align: left; display: flex; flex-direction: column; gap: 6px; box-shadow: 0 0 0 1px rgba(0, 0, 0, .4), 0 12px 30px rgba(0, 0, 0, .4); animation: cin .25s backwards; }
   .card:nth-child(2) { animation-delay: .05s; } .card:nth-child(3) { animation-delay: .1s; }
@@ -207,7 +216,7 @@
   #target i:nth-child(3) { left: 0; bottom: 0; border-width: 0 0 2px 2px; } #target i:nth-child(4) { right: 0; bottom: 0; border-width: 0 2px 2px 0; }
   #weak { position: absolute; width: 12px; height: 12px; margin: -6px; background: var(--red); border: 2px solid #fff; transform: rotate(45deg); }
   #tags { position: absolute; inset: 0; overflow: hidden; }
-  .ntag { position: absolute; transform: translate(-50%, -100%); font-size: 12px; white-space: nowrap; color: #bfe9ff; }
+  .ntag { position: absolute; left: 0; top: 0; will-change: transform; font-size: 12px; white-space: nowrap; color: #bfe9ff; }
   .ntag.down { color: var(--red); font-family: 'Jua'; font-size: 14px; }
   #prompt { position: absolute; left: 50%; top: 62%; transform: translateX(-50%); background: var(--glass); border: 1px solid var(--line2); border-radius: 10px; padding: 6px 14px; }
   #banner { position: absolute; top: 24%; left: 50%; transform: translate(-50%, -10px); font-family: 'Jua'; font-size: 34px; color: var(--txt); white-space: nowrap; opacity: 0; transition: opacity .3s, transform .3s;
@@ -241,6 +250,7 @@
   #rotate { display: none; position: fixed; inset: 0; background: #0e1a22; z-index: 50; align-items: center; justify-content: center; font-family: 'Jua'; font-size: 24px; text-align: center; padding: 20px; }
   @media (orientation: portrait) { body.touch #rotate { display: flex; } }
   @media (max-width: 860px) {
+    .lclasses { grid-template-columns: repeat(2, 1fr); }
     #town { flex-direction: column; } #town-side { width: auto; flex-direction: row; flex-wrap: wrap; align-items: center; padding: 10px 14px; border-right: none; border-bottom: 1px solid var(--line); }
     #town-side h1 { font-size: 18px; } #town-side .sub, .whoami { display: none; } #town-nav { flex-direction: row; flex-wrap: wrap; } #town-nav button { font-size: 14px; padding: 6px 10px; border-left: none; border-bottom: 2px solid transparent; border-radius: 6px; } #town-nav button.on { border-bottom-color: var(--gold); }
     #town-main { padding: 14px; } .modes, .smith { grid-template-columns: 1fr; } .slots { grid-template-columns: 1fr; } .statrow { grid-template-columns: 1fr 1fr 30px 36px; }
@@ -279,6 +289,7 @@
     </div>
   </div>
   <div id="prompt" class="hidden"></div>
+  <div id="waitcards" class="hidden"></div>
   <div id="banner"></div>
   <div id="toasts"></div>
   <div id="dmg"></div>
@@ -318,8 +329,10 @@
 <div id="lobby" class="overlay hidden"><div class="panel"></div></div>
 
 <div id="cards" class="overlay hidden">
-  <h2 id="cards-title"></h2><div id="cards-row"></div><button id="cards-reroll"></button>
-  <div class="note">게임은 멈추지 않는다 — 안전한지 확인하고 고르자</div>
+  <h2 id="cards-title"></h2>
+  <div id="cards-timer"><i></i><b></b></div>
+  <div id="cards-row"></div><button id="cards-reroll"></button>
+  <div class="note">고르는 동안 게임이 멈춘다 · 시간이 다 되면 자동으로 하나 고른다</div>
 </div>
 
 <div id="result" class="overlay hidden"><div class="panel"></div></div>

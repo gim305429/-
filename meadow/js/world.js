@@ -59,10 +59,10 @@ export function buildWorld(W) {
   clearWorld();
   root = new THREE.Group(); scene.add(root);
   root.add(A.makeGround(D.WORLD_R, D.REGIONS.map(r => r.tint)));
-  root.add(A.makeCliffRing(D.WORLD_R));
-  const castle = A.makeCastle(); castle.position.set(40, 0, -200); root.add(castle);
+  const stat = [A.makeCliffRing(D.WORLD_R)]; // 움직이지 않는 것들은 마지막에 묶어서 그린다
+  const castle = A.makeCastle(); castle.position.set(40, 0, -200); stat.push(castle);
   root.add(A.makeFlowers(W.flowers));
-  const fire = A.makeCampfire(); fire.position.set(0, 0, 2); root.add(fire);
+  const fire = A.bakeGroup(A.makeCampfire()); fire.position.set(0, 0, 2); root.add(fire);
   G.world = { W, anim: [fire], seal: false, barrier: null };
   for (const o of W.obstacles) {
     let m;
@@ -70,21 +70,23 @@ export function buildWorld(W) {
     else if (o.kind === 'windmill') { m = A.makeWindmill(); m.position.set(o.x, 0, o.z); G.world.anim.push(m); }
     else if (o.kind === 'tent') { m = A.makeTent(o.c); m.position.set(o.x, 0, o.z); }
     else { m = A.makeObstacle(o.kind, o.r); m.position.set(o.x, 0, o.z); }
-    root.add(m);
+    if (o.kind === 'windmill') root.add(A.bakeGroup(m)); else stat.push(m);
     G.obstacles.push({ x: o.x, z: o.z, r: o.kind === 'tree' ? 0.6 : o.r, h: o.h, kind: o.kind });
   }
-  G.camps = W.camps.map(c => { const m = A.makeCamp(); m.position.set(c.x, 0, c.z); root.add(m); G.world.anim.push(m.userData.fire); return { ...c, mesh: m, state: 'idle', wave: 0, waves: 0, pending: 0 }; });
-  for (const [k, l] of Object.entries(W.lairs)) { const m = A.makeLair(k === 'final'); m.position.set(l.x, 0, l.z); root.add(m); }
+  G.camps = W.camps.map(c => { const m = A.bakeGroup(A.makeCamp()); m.position.set(c.x, 0, c.z); root.add(m); G.world.anim.push(m.userData.fire); return { ...c, mesh: m, state: 'idle', wave: 0, waves: 0, pending: 0 }; });
+  for (const [k, l] of Object.entries(W.lairs)) { const m = A.makeLair(k === 'final'); m.position.set(l.x, 0, l.z); stat.push(m); }
   const bar = A.makeBarrier(21); bar.position.set(W.lairs.final.x, 0, W.lairs.final.z); root.add(bar); G.world.barrier = bar;
   G.props = W.props.map(p => {
     const mk = { pad: A.makeJumpPad, boom: A.makeBoomShroom, crystal: A.makeLCrystal, spring: A.makeSpring, thorn: () => A.makeThornBush(p.r) }[p.kind];
-    const m = mk(); m.position.set(p.x, 0, p.z); root.add(m);
+    const m = p.kind === 'thorn' ? mk() : A.bakeGroup(mk()); m.position.set(p.x, 0, p.z); if (p.kind === 'thorn') stat.push(m); else root.add(m);
     return { ...p, pos: new THREE.Vector3(p.x, 0, p.z), mesh: m, cd: 0, charge: 1, active: true, h: p.kind === 'crystal' ? 3 : 1.4 };
   });
-  G.chests = W.chests.map(c => { const m = A.makeChest(); m.position.set(c.x, 0, c.z); m.rotation.y = c.x; root.add(m); return { ...c, pos: m.position, mesh: m, opened: false, seen: false }; });
+  root.add(A.bakeStatic(stat));
+  G.chests = W.chests.map(c => { const m = A.bakeGroup(A.makeChest()); m.position.set(c.x, 0, c.z); m.rotation.y = c.x; root.add(m); return { ...c, pos: m.position, mesh: m, opened: false, seen: false }; });
 }
+export const addToWorld = o => root.add(o); // 판 도중 생기는 물체(거점 상자 등)도 판이 끝나면 같이 치운다
 export function clearWorld() {
-  if (root) scene.remove(root); root = null;
+  if (root) A.dispose(root); root = null;
   G.obstacles.length = 0; G.props.length = 0; G.camps.length = 0; G.chests.length = 0; G.world = null;
 }
 

@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import * as D from './data.js';
 import * as A from './art.js';
-import { G, scene, isHost, rnd, pick, clamp, d2, fx, burst, ringFx, beamFx, shake, P3, nextId, sfx } from './core.js';
+import { G, scene, isHost, rnd, pick, clamp, d2, fx, burst, ringFx, beamFx, shake, P3, nextId, sfx, spawnPart } from './core.js';
 
 export const hooks = {}; // run.js 가 채운다: kill(e, by), bossKilled(e), drop(actor, pos, opt), xp(n), down(a)
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -156,7 +156,8 @@ export function hitEnemy(e, base, o = {}) {
   const from = a ? a.pos : e.pos;
   const dir = o.dir ? tmpV.copy(o.dir).setY(0).normalize() : tmpV.copy(e.pos).sub(from).setY(0).normalize();
   const fw = tmpV2.set(Math.sin(e.yaw), 0, Math.cos(e.yaw)), facing = -(fw.x * dir.x + fw.z * dir.z);
-  if (e.def?.front && facing > 0.3) d *= e.def.front;
+  if (e.def?.front && facing > 0.3 && !e.chg && !(e.st.stun > 0)) d *= e.def.front;
+  if (e.chg === 'rec' || (e.def?.front && e.st.stun > 0)) d *= 1.5; // 돌진 뒤 빈틈
   if (e.def?.backCrystal) d *= facing < -0.3 ? 2 : 0.5;
   if (e.affix === 'tough') d *= 0.7;
   if (e.boss) d *= bossDamageMod(e, o, facing);
@@ -187,8 +188,8 @@ export function spawnEnemy(key, pos, o = {}) {
   G.enemies.push(e); return e;
 }
 export function removeEnemy(e) {
-  scene.remove(e.model); scene.remove(e.bar);
-  if (e.laserMesh) scene.remove(e.laserMesh);
+  A.dispose(e.model); A.dispose(e.bar);
+  if (e.laserMesh) A.dispose(e.laserMesh);
   if (e.lineId) { fx('t-', { id: e.lineId }); e.lineId = null; }
   const i = G.enemies.indexOf(e); if (i >= 0) G.enemies.splice(i, 1);
 }
@@ -238,6 +239,7 @@ export function updateEnemy(e, dt) {
   const toP = tmpV.copy(P.pos).sub(e.pos).setY(0); const dist = toP.length(); toP.normalize();
   e.yaw = Math.atan2(toP.x, toP.z);
   const reach = 1.1 + e.r, def = e.def;
+  if (def.type === 'shield' && shieldCharge(e, P, toP, dist, slowM, dt)) return finishEnemy(e, dt);
   switch (def.type) {
     case 'rush': case 'ambush': case 'shield': {
       if (def.teleport) { e.tp = (e.tp ?? 4) - dt; if (e.tp <= 0 && dist > 3) { e.tp = 4; burst(e.pos, 0x6a5a9a, 10, 1); e.pos.copy(P.pos).addScaledVector(fwdOf(P), -2.2); burst(e.pos, 0x6a5a9a, 10, 1); } }
@@ -289,14 +291,53 @@ export function updateEnemy(e, dt) {
   if (move && !(e.st.root > 0)) e.pos.addScaledVector(move.normalize(), e.speed * slowM * dt);
   finishEnemy(e, dt);
 }
+// 방패 돌진: 멈춰서 몸을 낮추고(느낌표·주황 경고선) → 직선 돌진 → 빗나가면 잠깐 빈틈, 벽에 박거나 전사가 막으면 기절
+function shieldCharge(e, P, toP, dist, slowM, dt) {
+  e.chCd = (e.chCd ?? rnd(2, 5)) - dt;
+  if (e.chg === 'wind') {
+    e.chT -= dt; e.yaw = Math.atan2(e.cdir.x, e.cdir.z);
+    if (e.chT <= 0) { e.chg = 'go'; e.chT = 0.95; e.chit = new Set(); if (e.lineId) { fx('t-', { id: e.lineId }); e.lineId = null; } fx('sfx', { k: 'charge', p: P3(e.pos) }); }
+    return true;
+  }
+  if (e.chg === 'go') {
+    e.chT -= dt; e.pos.addScaledVector(e.cdir, 15 * slowM * dt); e.yaw = Math.atan2(e.cdir.x, e.cdir.z);
+    for (const a of G.actors) {
+      if (!alive(a) || e.chit.has(a) || d2(a.pos, e.pos) > e.r + 0.8 || a.pos.y > 1.2) continue;
+      e.chit.add(a);
+      const dx = e.pos.x - a.pos.x, dz = e.pos.z - a.pos.z, l = Math.hypot(dx, dz) || 1;
+      const parry = a.cls === 'warrior' && a.input.rmb && (-Math.sin(a.yaw) * dx - Math.cos(a.yaw) * dz) / l > 0.3;
+      takeDamage(a, e.atk * 1.6, { src: e, melee: true });
+      if (parry) { e.chg = 'rec'; e.chT = 0.3; e.st.stun = 2.2; burst(e.pos, 0xffe08a, 12, 1.2); shake(0.3, a.id); fx('toast', { to: a.id, text: '돌진을 방패로 튕겨냈다! 기절' }); return true; }
+    }
+    if (G.obstacles.some(o => d2(o, e.pos) < o.r + e.r) || Math.hypot(e.pos.x, e.pos.z) > D.WORLD_R - 3) { e.chg = 'rec'; e.chT = 0.3; e.st.stun = 2.5; burst(e.pos, 0xd6c49a, 10, 1); shake(0.25); }
+    else if (e.chT <= 0) { e.chg = 'rec'; e.chT = 1.3; }
+    return true;
+  }
+  if (e.chg === 'rec') { e.chT -= dt; if (e.chT <= 0) { e.chg = null; e.chCd = rnd(4, 7); } return true; }
+  if (e.chCd <= 0 && dist > 4 && dist < 14 && !(e.wind > 0)) {
+    e.chg = 'wind'; e.chT = e.def.teleport ? 0.8 : 1.0; e.cdir = toP.clone(); e.lineId = nextId();
+    fx('t+', { id: e.lineId, k: 'l', p: P3(e.pos), len: 16, w: 1.4, rot: Math.atan2(toP.x, toP.z), dur: e.chT, c: 0xffa23a }); fx('sfx', { k: 'warn', p: P3(e.pos) });
+    return true;
+  }
+  return false;
+}
 function finishEnemy(e, dt) {
   for (const o of G.enemies) { if (o === e || o.boss) continue; const dd = d2(o.pos, e.pos), m = o.r + e.r; if (dd < m && dd > 0.001) { tmpV.copy(e.pos).sub(o.pos).setY(0).normalize().multiplyScalar((m - dd) * 0.5); e.pos.add(tmpV); } }
   pushOut(e.pos, e.r);
   enemyVisual(e);
 }
 // 몬스터 모습 갱신 (방장·참가자 공통)
+const FAR2 = 95 * 95, LINE2 = 34 * 34;
 export function enemyVisual(e, cam) {
+  // 멀리 있는 몬스터는 그리지 않고, 조금 먼 몬스터는 외곽선을 끈다
+  const me = G.me, dd = me ? (e.pos.x - me.pos.x) ** 2 + (e.pos.z - me.pos.z) ** 2 : 0;
+  const far = dd > FAR2; if (e.model.visible === far) e.model.visible = !far;
+  if (far) { e.bar.visible = false; return; }
+  const ol = dd < (e.elite ? 4 * LINE2 : LINE2);
+  if (e.lodO !== ol && e.def.type !== 'ambush') { e.lodO = ol; for (const o of e.model.userData.olines) o.visible = ol; }
   const y = e.def.type === 'flyer' ? e.vy : 0;
+  const u = e.model.userData;
+  if (u.alert) { const cw = e.chg === 'wind', go = e.chg === 'go'; u.alert.visible = cw; u.alert.scale.setScalar(cw ? 1 + Math.sin(G.time * 18) * 0.15 : 1); u.shield.rotation.x = cw ? -0.25 : go ? -0.5 : 0; u.shield.position.x = cw || go ? 0 : -0.25; e.model.scale.y = e.model.scale.x * (cw ? 0.86 : 1); }
   e.model.position.set(e.pos.x, y, e.pos.z); e.model.rotation.y = e.yaw;
   if (e.def.type === 'bomber') e.model.rotation.x = e.spinX || 0;
   else if (e.def.type !== 'flyer') e.model.position.y = Math.abs(Math.sin((e.t || G.time) * 8)) * 0.05;
@@ -304,6 +345,7 @@ export function enemyVisual(e, cam) {
   if (e.model.userData.arms) for (const a of e.model.userData.arms) a.rotation.x = e.wind > 0 ? -2.6 * (1 - e.wind / (e.windMax || 1)) : 0;
   if (e.flash > 0) A.flash(e.model, true);
   else if (e.st.freeze > 0 || e.frozen) A.tint(e.model, 0x8fd8ff, 0.6);
+  else if (e.chg === 'wind') A.tint(e.model, 0xffa23a, 0.4 + 0.25 * Math.sin(G.time * 18));
   else if (e.wind > 0) A.tint(e.model, 0xff4a3a, 0.5 * (1 - e.wind / (e.windMax || 1)));
   else A.flash(e.model, false);
   const showBar = e.hp < e.maxHp; e.bar.visible = showBar;
@@ -360,13 +402,25 @@ function shockwave(c, maxR, dur, dmg) {
     for (const a of G.actors) if (alive(a) && !hit.has(a) && Math.abs(d2(c, a.pos) - r) < 0.7 && a.pos.y < 0.35) { hit.add(a); takeDamage(a, dmg, { pos: c }); }
     return f.t < dur; } });
 }
+// 직선 공격: 경고선 → 선 안에 있으면 피해
+function lineStrike(o, ang, len, w, t, dmg, color = 0x6a4a2e) {
+  const id = nextId(), dx = Math.sin(ang), dz = Math.cos(ang); fx('t+', { id, k: 'l', p: P3(o), len, w, rot: ang, dur: t });
+  G.teles.push({ id, t: 0, total: t, onDone: () => {
+    for (const a of G.actors) { if (!alive(a)) continue; const rx = a.pos.x - o.x, rz = a.pos.z - o.z, along = rx * dx + rz * dz, side = Math.abs(rx * dz - rz * dx);
+      if (along > -0.5 && along < len && side < w / 2 + 0.3 && a.pos.y < 1.2) takeDamage(a, dmg, { pos: o }); }
+    for (let k = 2; k < len; k += 3) burst(o.clone().add(V3(dx * k, 0, dz * k)), color, 3, 0.2);
+  } });
+}
+// 처음 보는 패턴은 한 번만 이름과 피하는 법을 알려준다
+function hint(e, k, text) { e.hints = e.hints || new Set(); if (e.hints.has(k)) return; e.hints.add(k); fx('banner', { text, dur: 1.6 }); }
+const later = (t, f) => G.teles.push({ id: null, t: 0, total: t, onDone: f });
 function updateBoss(e, dt) {
   e.t += dt; e.pat -= dt; e.aggroT -= dt;
   let P = null, pd = 1e9;
   for (const a of G.actors) { if (!alive(a) || a.choosing) continue; const dd = d2(a.pos, e.center); if (dd < 24 && d2(a.pos, e.pos) < pd) { pd = d2(a.pos, e.pos); P = a; } }
   if (!P) { // 아무도 없으면 제자리로 돌아가 회복
     const back = tmpV.copy(e.center).sub(e.pos).setY(0); if (back.length() > 1 && e.key !== 'thorn') e.pos.addScaledVector(back.normalize(), 3 * dt);
-    e.hp = Math.min(e.maxHp, e.hp + e.maxHp * 0.03 * dt); if (e.laserMesh) { scene.remove(e.laserMesh); e.laserMesh = null; e.laserA = null; } e.state = e.state === 'stunned' ? 'stunned' : 'idle'; e.invuln = e.key === 'queen' && e.state === 'burrow';
+    e.hp = Math.min(e.maxHp, e.hp + e.maxHp * 0.03 * dt); if (e.laserMesh) { A.dispose(e.laserMesh); e.laserMesh = null; e.laserA = null; } e.state = e.state === 'stunned' ? 'stunned' : 'idle'; e.invuln = e.key === 'queen' && e.state === 'burrow';
     return finishBoss(e);
   }
   const toP = tmpV.copy(P.pos).sub(e.pos).setY(0), dist = toP.length(); toP.normalize();
@@ -381,8 +435,10 @@ function updateBoss(e, dt) {
   if (K === 'thorn') {
     e.yaw = Math.atan2(toP.x, toP.z) * 0.15;
     if (e.pat <= 0) {
-      const ch = ['roots', 'seeds']; if (e.hp / e.maxHp < 0.5 && e.minions < 10) ch.push('summon');
+      const ch = ['roots', 'seeds', 'ring']; if (e.hp / e.maxHp < 0.5 && e.minions < 10) ch.push('summon'); if (e.phase === 2) ch.push('whip', 'whip');
       const c = pick(ch); e.pat = bpt(e, 2.4);
+      if (c === 'ring') { hint(e, c, '가시 고리 — 심장 가까이 붙어라!'); for (let i = 0; i < 14; i++) { const a = i / 14 * Math.PI * 2; groundStrike(e.center.clone().add(V3(Math.cos(a) * 9.5, 0, Math.sin(a) * 9.5)), 2.6, 1.3, 26, 'spike'); } e.pat += 0.8; }
+      if (c === 'whip') { hint(e, c, '덩굴 채찍 — 갈색 선 밖으로!'); const base = Math.atan2(toP.x, toP.z) + rnd(-0.3, 0.3); for (let i = 0; i < 4; i++) lineStrike(e.pos.clone(), base + i * Math.PI / 2, 22, 2.6, 1.2, 30); later(1.5, () => { if (!e.dead) for (let i = 0; i < 4; i++) lineStrike(e.pos.clone(), base + Math.PI / 4 + i * Math.PI / 2, 22, 2.6, 1.0, 30); }); e.pat += 1.2; }
       if (c === 'roots') { const targets = G.actors.filter(a => alive(a) && d2(a.pos, e.center) < 24); for (const a of targets) for (let i = 0; i < 2; i++) groundStrike(i === 0 ? a.pos.clone() : a.pos.clone().add(V3(rnd(-4, 4), 0, rnd(-4, 4))), 1.6, 1.0, 25, 'spike'); }
       if (c === 'seeds') { const from = e.pos.clone().setY(3.5), base = Math.atan2(toP.x, toP.z); for (let i = -3; i <= 3; i++) { const a = base + i * 0.13; const v = V3(Math.sin(a), 0, Math.cos(a)).multiplyScalar(10); v.y = (1.0 - 3.5) / (dist / 10 + 0.01); enemyProj(from, v, 10, 0x8a6a3a, null, 0.22); } }
       if (c === 'summon') { for (let i = 0; i < 4; i++) hooks.summon('mushroom', e.pos.clone().add(V3(rnd(-5, 5), 0, rnd(3, 7)))); e.minions += 4; }
@@ -396,7 +452,10 @@ function updateBoss(e, dt) {
     e.yaw = Math.atan2(toP.x, toP.z);
     if (dist > 7) e.pos.addScaledVector(toP, 1.5 * dt); else if (dist < 4) e.pos.addScaledVector(toP, -1.5 * dt);
     if (e.pat <= 0) {
-      const c = pick(['spore', 'spore', 'summon', 'burrow']); e.pat = bpt(e, 3);
+      const ch = ['spore', 'spore', 'summon', 'burrow', 'nova']; if (e.phase === 2) ch.push('rain', 'rain');
+      const c = pick(ch); e.pat = bpt(e, 3);
+      if (c === 'nova') { hint(e, c, '포자 폭발 — 여왕에게서 떨어져라!'); groundStrike(e.pos.clone(), 7, 1.2, 28, 'emerge'); }
+      if (c === 'rain') { hint(e, c, '포자 비 — 멈추지 말고 움직여라!'); for (const a of G.actors.filter(x => alive(x) && d2(x.pos, e.center) < 24)) for (let i = 0; i < 5; i++) later(i * 0.35, () => { if (!e.dead && alive(a)) groundStrike(a.pos.clone().add(V3(rnd(-1.5, 1.5), 0, rnd(-1.5, 1.5))), 2, 0.8, 14, 'emerge'); }); e.pat += 1; }
       if (c === 'spore') { const p = P.pos.clone(), id = nextId(); fx('t+', { id, k: 'c', p: P3(p), r: 3, c: 0x9ad04a, dur: 0.8 }); G.teles.push({ id, t: 0, total: 0.8, onDone: () => addZone(p, 3, 5, 'spore', { dps: 5, side: 'enemy', blur: true }) }); }
       if (c === 'summon' && G.enemies.length < 40) for (let i = 0; i < 6; i++) hooks.summon('mushroom', e.pos.clone().add(V3(rnd(-4, 4), 0, rnd(-4, 4))));
       if (c === 'burrow') { e.state = 'burrow'; e.bt = 0.6; e.invuln = true; e.tele = false; }
@@ -407,7 +466,9 @@ function updateBoss(e, dt) {
       for (const a of G.actors) if (alive(a) && !e.chit.has(a) && d2(e.pos, a.pos) < e.r + 0.8) { e.chit.add(a); takeDamage(a, 25, { src: e, melee: true }); }
       const hitWall = d2(e.pos, e.center) > 18 || G.obstacles.some(o => d2(o, e.pos) < o.r + e.r);
       e.ct -= dt;
-      if (hitWall || e.ct <= 0) { e.state = 'stunned'; e.stunT = hitWall ? 2.5 : 0.8; shake(0.4); if (hitWall) fx('banner', { text: '수문장이 기절했다 — 등을 노려라', dur: 1.5 }); }
+      if (hitWall || e.ct <= 0) {
+        if (!hitWall && e.phase === 2 && !e.second) { e.second = true; e.state = 'windup'; e.wt = 0.6; e.cdir = tmpV2.copy(P.pos).sub(e.pos).setY(0).normalize().clone(); e.lineId = nextId(); fx('t+', { id: e.lineId, k: 'l', p: P3(e.pos), len: 40, w: e.r * 2, rot: Math.atan2(e.cdir.x, e.cdir.z), dur: 0.6 }); hint(e, 'double', '한 번 더 돌진한다!'); return finishBoss(e); }
+        e.second = false; e.state = 'stunned'; e.stunT = hitWall ? 2.5 : 0.8; shake(0.4); if (hitWall) fx('banner', { text: '수문장이 기절했다 — 등을 노려라', dur: 1.5 }); }
       return finishBoss(e);
     }
     if (e.state === 'windup') { e.wt -= dt; if (e.wt <= 0) { fx('t-', { id: e.lineId }); e.state = 'charge'; e.chit = new Set(); e.ct = 2.2; } return finishBoss(e); }
@@ -415,7 +476,13 @@ function updateBoss(e, dt) {
     if (dist > 4) e.pos.addScaledVector(toP, 2.2 * dt);
     if (e.pat <= 0) {
       e.pat = bpt(e, 3.2);
-      if (Math.random() < 0.55) { e.state = 'windup'; e.wt = 1.0; e.cdir = toP.clone(); e.lineId = nextId(); fx('t+', { id: e.lineId, k: 'l', p: P3(e.pos), len: 40, w: e.r * 2, rot: Math.atan2(toP.x, toP.z), dur: 1 }); }
+      const roll = Math.random();
+      if (roll < 0.25) { // 앞쪽 휩쓸기
+        hint(e, 'sweep', '앞쪽 휩쓸기 — 옆이나 뒤로 피해라!'); const yaw = Math.atan2(toP.x, toP.z);
+        for (let i = -2; i <= 2; i++) { const a = yaw + i * 0.45; groundStrike(e.pos.clone().add(V3(Math.sin(a) * 3.6, 0, Math.cos(a) * 3.6)), 2.2, 0.9, 24, 'emerge'); }
+      } else if (roll < 0.4 && e.phase === 2) { // 낙석
+        hint(e, 'rocks', '낙석 — 붉은 원을 피해라!'); for (const a of G.actors.filter(x => alive(x) && d2(x.pos, e.center) < 24)) for (let i = 0; i < 3; i++) later(i * 0.6, () => { if (!e.dead && alive(a)) groundStrike(a.pos.clone(), 2.4, 1.0, 22, 'shard'); });
+      } else if (roll < 0.75) { e.state = 'windup'; e.wt = 1.0; e.cdir = toP.clone(); e.lineId = nextId(); fx('t+', { id: e.lineId, k: 'l', p: P3(e.pos), len: 40, w: e.r * 2, rot: Math.atan2(toP.x, toP.z), dur: 1 }); }
       else { const c = e.pos.clone(); G.teles.push({ id: null, t: 0, total: 0.8, onDone: () => shockwave(c, 14, 1.2, 20) }); e.modelY = 0.6; }
     }
   } else if (K === 'turtleking') {
@@ -439,8 +506,12 @@ function updateBoss(e, dt) {
     e.yaw = Math.atan2(toP.x, toP.z);
     if (dist > 6) e.pos.addScaledVector(toP, 1.4 * dt);
     if (e.pat <= 0) {
-      const c = pick(['laser', 'spin', 'shards']); e.pat = bpt(e, 3.4);
-      if (c === 'laser') { e.state = 'laser'; e.lt = 4; e.laserA = e.yaw + Math.PI; fx('banner', { text: '광선! 점프로 넘어라', dur: 1.2 }); }
+      const ch = ['laser', 'spin', 'shards', 'quake']; if (e.phase === 2) ch.push('bubbles', 'bubbles');
+      const c = pick(ch); e.pat = bpt(e, 3.4);
+      if (c === 'quake') { hint(e, c, '지진 — 파동이 올 때 점프!'); const cc = e.pos.clone(); e.modelY = 0.8; for (let i = 0; i < 3; i++) later(0.7 + i * 0.75, () => { if (!e.dead) shockwave(cc, 16, 1.3, 18); }); e.pat += 1.5; }
+      if (c === 'bubbles') { hint(e, c, '수정 방울 — 사이로 빠져나가라!'); const from = e.pos.clone().setY(1.2), off = rnd(0, 1); for (let i = 0; i < 12; i++) { const a = (i + off) / 12 * Math.PI * 2; enemyProj(from, V3(Math.sin(a), 0, Math.cos(a)).multiplyScalar(6), 16, 0x9ff0ff, e, 0.35); }
+        later(0.9, () => { if (e.dead) return; const f2 = e.pos.clone().setY(1.2); for (let i = 0; i < 12; i++) { const a = (i + off + 0.5) / 12 * Math.PI * 2; enemyProj(f2, V3(Math.sin(a), 0, Math.cos(a)).multiplyScalar(6), 16, 0x9ff0ff, e, 0.35); } }); }
+      if (c === 'laser') { e.state = 'laser'; e.lt = 4; e.laserA = e.yaw + Math.PI; hint(e, c, '광선 — 점프로 넘어라!'); }
       if (c === 'spin') { e.state = 'windup'; e.wt = 0.8; e.cdir = toP.clone(); e.lineId = nextId(); fx('t+', { id: e.lineId, k: 'l', p: P3(e.pos), len: 40, w: e.r * 2, rot: Math.atan2(toP.x, toP.z), dur: 0.8 }); }
       if (c === 'shards') for (const a of G.actors.filter(x => alive(x) && d2(x.pos, e.center) < 24)) for (let i = 0; i < 3; i++) groundStrike(a.pos.clone().add(V3(rnd(-4, 4), 0, rnd(-4, 4))), 1.8, 1.2, 15, 'shard');
     }
@@ -459,7 +530,7 @@ export function bossVisual(e) {
   if (e.laserA != null) {
     if (!e.laserMesh) { const geo = new THREE.BoxGeometry(0.35, 0.35, 20); geo.translate(0, 0, 10); e.laserMesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0x9ff0ff })); scene.add(e.laserMesh); }
     e.laserMesh.position.set(e.pos.x, 0.45, e.pos.z); e.laserMesh.rotation.y = e.laserA;
-  } else if (e.laserMesh) { scene.remove(e.laserMesh); e.laserMesh = null; }
+  } else if (e.laserMesh) { A.dispose(e.laserMesh); e.laserMesh = null; }
   if (e.flash > 0) A.flash(m, true); else A.flash(m, false);
 }
 
@@ -766,7 +837,7 @@ function useQ(a, eff) {
   }
 }
 export function updateRain(dt) { // 화살비 연출 (모두)
-  for (const v of G.vfx.zone.values()) if (v.k === 'rain' && Math.random() < 0.8) { const ang = Math.random() * 6.28, rr = Math.sqrt(Math.random()) * v.r; G.parts.push({ mesh: (() => { const m = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.5, 0.04), new THREE.MeshBasicMaterial({ color: 0xc89a5a })); m.position.set(v.p.x + Math.cos(ang) * rr, 6, v.p.z + Math.sin(ang) * rr); scene.add(m); return m; })(), vel: V3(0, -22, 0), life: 0.4 }); }
+  for (const v of G.vfx.zone.values()) if (v.k === 'rain' && Math.random() < 0.8) { const ang = Math.random() * 6.28, rr = Math.sqrt(Math.random()) * v.r; spawnPart(V3(v.p.x + Math.cos(ang) * rr, 6, v.p.z + Math.sin(ang) * rr), V3(0, -22, 0), 0xc89a5a, 0.4, 0.1); }
 }
 
 // ================= 봇 =================

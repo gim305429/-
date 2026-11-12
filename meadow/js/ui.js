@@ -162,17 +162,21 @@ export function showLobby(st) {
   hideAll(); const box = $('#lobby'); box.classList.remove('hidden');
   const url = `${location.origin}${location.pathname}?room=${st.code || ''}`;
   const slots = [...st.players.map(p => ({ ...p, bot: false }))];
-  for (let i = slots.length; i < D.PARTY_MAX; i++) slots.push({ bot: i - st.players.length < G.save.bots || !st.host, empty: true });
+  const nb = st.host ? G.save.bots : (st.bots ?? 0);
+  for (let i = slots.length; i < D.PARTY_MAX; i++) slots.push({ bot: i - st.players.length < nb, empty: true });
   box.querySelector('.panel').innerHTML = `
     <div class="lhead"><div><div class="note">방 코드</div><div class="code">${st.code || '…'}</div></div>
       ${st.host ? `<button id="copylink">초대 링크 복사</button>` : ''}</div>
     ${st.host ? `<div class="note linktext">${url}</div>` : ''}
-    <div class="lslots">${slots.map(p => p.empty ? `<div class="lslot empty">${st.host ? (p.bot ? '봇 동료' : '빈자리') : '빈자리 (봇이 채울 수 있음)'}</div>` :
+    <div class="lslots">${slots.map(p => p.empty ? `<div class="lslot empty">${p.bot ? '봇 동료' : '빈자리'}</div>` :
       `<div class="lslot">${emblem(p.cls)}<div><b>${p.name}</b>${p.host ? ' <span class="tag">방장</span>' : ''}<div class="note">${D.CLASSES[p.cls].name} · Lv.${p.lv}</div></div></div>`).join('')}</div>
-    <p class="note">직업은 마을 화면에서 고른 것으로 들어간다. 바꾸려면 나갔다가 다시 들어오면 된다.</p>
+    <div class="lpick"><div class="note">내 직업</div><div class="lclasses">${D.CLASS_IDS.map(id => `<button data-cls="${id}" class="${G.save.cls === id ? 'on' : ''}">${emblem(id, 'sm')} ${D.CLASSES[id].name} <small>Lv.${G.save.classes[id].lv}</small></button>`).join('')}</div></div>
+    ${st.host ? `<label class="bots">빈자리 봇 <input type="range" min="0" max="3" step="1" value="${G.save.bots}" id="lbots"><b>${G.save.bots}명</b></label>` : ''}
     <div class="lbtns">${st.host ? `<button id="lstart" class="primary big">원정 출발</button>` : `<div class="note">방장이 출발하길 기다리는 중…</div>`}<button id="lleave">나가기</button></div>`;
   if (st.host) { $('#copylink').onclick = () => { navigator.clipboard?.writeText(url).then(() => toast('초대 링크를 복사했다'), () => toast('복사가 막혔다 — 위 주소를 직접 보내줘')); }; $('#lstart').onclick = () => api.lobbyStart(); }
   $('#lleave').onclick = () => api.leaveNet();
+  for (const b of box.querySelectorAll('.lclasses button')) b.onclick = () => { G.save.cls = b.dataset.cls; api.writeSave(); for (const x of box.querySelectorAll('.lclasses button')) x.classList.toggle('on', x === b); api.lobbyChanged(); };
+  const lb = $('#lbots'); if (lb) lb.onchange = () => { G.save.bots = +lb.value; api.writeSave(); api.lobbyChanged(); };
 }
 
 // ================= 런 진입·포인터 =================
@@ -183,8 +187,10 @@ export function unlockPointer() { try { document.exitPointerLock(); } catch (e) 
 const locked = () => document.pointerLockElement === $('#game');
 
 // ================= 카드 =================
-let cardPick = null;
+let cardPick = null, cardDeadline = 0, cardAuto = null;
+const CARD_TIME = 15;
 export function showCards(choices, onPick, rerolls, onReroll, isChest) {
+  cardDeadline = performance.now() + CARD_TIME * 1000;
   const box = $('#cards'); box.classList.remove('hidden'); $('#banner').classList.remove('show'); bannerT = 0;
   const row = $('#cards-row'); row.innerHTML = '';
   $('#cards-title').textContent = isChest ? '보상 — 희귀 이상 강화 카드' : '강화 카드를 고르세요';
@@ -201,8 +207,17 @@ export function showCards(choices, onPick, rerolls, onReroll, isChest) {
   if (!choices.length) { const b = el('button', 'card', '<div class="ctitle">더 고를 카드가 없다</div>'); b.onclick = () => onPick({ card: D.CARD_BY_ID.k_train, tier: Math.min(2, (G.me.cards.k_train ?? -1) + 1) }); row.appendChild(b); }
   const rr = $('#cards-reroll'); rr.textContent = `다시 뽑기 (${rerolls})`; rr.disabled = rerolls <= 0; rr.onclick = onReroll;
   cardPick = i => { const ch = choices[i]; if (ch) onPick(ch); };
+  // 시간이 다 되면 아무거나 하나 자동으로 고른다
+  cardAuto = () => { const btns = [...document.querySelectorAll('#cards-row .card')]; btns[Math.floor(Math.random() * btns.length)]?.click(); };
 }
-export function hideCards() { $('#cards').classList.add('hidden'); cardPick = null; }
+export function hideCards() { $('#cards').classList.add('hidden'); cardPick = null; cardAuto = null; }
+function cardTick() {
+  if (!cardAuto) return;
+  const left = Math.max(0, (cardDeadline - performance.now()) / 1000);
+  $('#cards-timer i').style.width = `${left / CARD_TIME * 100}%`; $('#cards-timer b').textContent = Math.ceil(left);
+  $('#cards-timer').classList.toggle('low', left < 5);
+  if (left <= 0) cardAuto();
+}
 
 // ================= 결과 =================
 export function showResult(r, done) {
@@ -239,7 +254,7 @@ function renderBag() {
   }
 }
 function closeBag() { $('#bag').classList.add('hidden'); G.mode = 'run'; lockPointer(); }
-function pause() { if (G.mode !== 'run') return; G.mode = 'pause'; $('#pause').classList.remove('hidden'); $('#pause-note').textContent = G.net ? '멀티 중에는 게임이 멈추지 않는다.' : '혼자 원정 중에는 게임이 멈춘다. (카드 고르기·가방은 멈추지 않는다)'; }
+function pause() { if (G.mode !== 'run') return; G.mode = 'pause'; $('#pause').classList.remove('hidden'); $('#pause-note').textContent = G.net ? '멀티 중에는 게임이 멈추지 않는다.' : '혼자 원정 중에는 게임이 멈춘다. (가방을 여는 동안은 멈추지 않는다)'; }
 function resume() { $('#pause').classList.add('hidden'); G.mode = 'run'; lockPointer(); }
 function toggleMap(on) { const m = $('#bigmap'); const show = on ?? m.classList.contains('hidden'); m.classList.toggle('hidden', !show); if (show) drawMap($('#bigmap canvas'), true); }
 
@@ -322,7 +337,7 @@ function updateCompass() {
 // ================= 매 프레임 HUD =================
 let lastCardKey = '', mapT = 0, partyKey = '';
 export function hud(g, camera) {
-  cam = camera;
+  cam = camera; cardTick();
   if (bannerT > 0) { bannerT -= 1 / 60; if (bannerT <= 0) $('#banner').classList.remove('show'); }
   if (!G.run || !G.me || !G.me.S) return;
   const me = G.me, S = me.S, run = G.run, cls = me.cls;
@@ -339,6 +354,8 @@ export function hud(g, camera) {
   $('#region').textContent = W ? regionName(me.pos.x, me.pos.z) : '';
   $('#objective').innerHTML = run.phase === 'victory' ? '포털로 돌아가 원정을 마치자' : W && W.seal ? '봉인이 풀렸다 — 북쪽 유적의 최종 보스' : `봉인 해제: 거점 <b>${Math.min(run.campsCleared, D.SEAL_CAMPS)}/${D.SEAL_CAMPS}</b> · 중간 보스 <b>${run.midDead ? '✓' : '✗'}</b>`;
   $('#danger').textContent = `위험도 ${run.danger}`;
+  const waitOthers = run.frozen && !me.choosing; $('#waitcards').classList.toggle('hidden', !waitOthers);
+  if (waitOthers) $('#waitcards').textContent = `${(run.choosers || []).join(', ')} — 강화 카드 고르는 중… 잠시 멈춤`;
   // 쿨타임
   const cd = (id, rem, max) => { for (const s of document.querySelectorAll(`[data-cd="${id}"]`)) s.style.setProperty('--cd', max > 0 ? Math.min(1, rem / max) : 0); };
   cd('q', me.cd.q, me.qMax || 1); cd('dash', me.cd.dash, S.dashCd); cd('rmb', me.cd.rmb, me.rmbMax || 1);
@@ -350,10 +367,16 @@ export function hud(g, camera) {
   const pk = G.actors.map(a => `${a.id}${a.state}${Math.round(a.hp / (a.S?.hpMax || 1) * 50)}`).join();
   if (pk !== partyKey) { partyKey = pk; $('#party').innerHTML = G.actors.filter(a => a !== me).map(a => `<div class="pf ${a.state}">${emblem(a.cls, 'sm')}<div class="pfb"><div class="pfn">${a.name}${a.kind === 'bot' ? ' <small>봇</small>' : ''}</div><div class="bar hp"><i style="width:${Math.max(0, a.hp / (a.S?.hpMax || 1) * 100)}%"></i></div></div>${a.state === 'down' ? '<em>쓰러짐</em>' : a.state === 'dead' ? '<em>전사</em>' : ''}</div>`).join(''); }
   // 이름표
-  let tags = '';
-  for (const a of G.actors) { if (a === me || !a.model) continue; tv.set(a.pos.x, a.pos.y + 2.2, a.pos.z).project(camera); if (tv.z > 1 || Math.abs(tv.x) > 1.1 || Math.abs(tv.y) > 1.1) continue; const d = Math.hypot(a.pos.x - me.pos.x, a.pos.z - me.pos.z); if (d > 45) continue;
-    tags += `<div class="ntag ${a.state}" style="left:${(tv.x + 1) / 2 * innerWidth}px;top:${(1 - tv.y) / 2 * innerHeight}px">${a.name}${a.state === 'down' ? ' — 살려줘!' : ''}</div>`; }
-  $('#tags').innerHTML = tags;
+  const tagBox = $('#tags');
+  G.actors.forEach((a, i) => {
+    let t = tagBox.children[i]; if (!t) { t = el('div', 'ntag'); tagBox.appendChild(t); }
+    tv.set(a.pos.x, a.pos.y + 2.2, a.pos.z).project(camera);
+    const show = a !== me && a.model && tv.z <= 1 && Math.abs(tv.x) < 1.1 && Math.abs(tv.y) < 1.1 && Math.hypot(a.pos.x - me.pos.x, a.pos.z - me.pos.z) < 45;
+    t.style.display = show ? '' : 'none'; if (!show) return;
+    const txt = a.name + (a.state === 'down' ? ' — 살려줘!' : ''); if (t.textContent !== txt) t.textContent = txt;
+    t.className = `ntag ${a.state}`; t.style.transform = `translate(${(tv.x + 1) / 2 * innerWidth}px, ${(1 - tv.y) / 2 * innerHeight}px) translate(-50%, -100%)`;
+  });
+  while (tagBox.children.length > G.actors.length) tagBox.lastChild.remove();
   // 미니맵·나침반 (가볍게 30fps)
   mapT -= 1 / 60; if (mapT <= 0) { mapT = 1 / 30; drawMap($('#minimap'), false); updateCompass(); if (!$('#bigmap').classList.contains('hidden')) drawMap($('#bigmap canvas'), true); }
   // 조준점

@@ -32,7 +32,7 @@ function addPart(g, geo, color, pos = [0, 0, 0], o = {}) {
     ol.position.copy(m.position); ol.rotation.copy(m.rotation);
     ol.scale.set(1 + 2 * t / Math.max(s.x, 0.01), 1 + 2 * t / Math.max(s.y, 0.01), 1 + 2 * t / Math.max(s.z, 0.01)).multiply(m.scale);
     g.add(ol); g.userData.omats.push(om);
-    m.userData.outline = ol;
+    m.userData.outline = ol; ol.userData.isOutline = true; ol.userData.of = m;
   }
   return m;
 }
@@ -422,7 +422,7 @@ export function makeAvatar(cls, weapon, armor) {
   else { w.main.position.set(0, -0.52, 0.05); w.main.rotation.x = cls === 'warrior' ? 1.2 : 0.2; armR.add(w.main); }
   if (w.off) { w.off.scale.setScalar(s); w.off.position.set(-0.05, -0.4, 0.15); armL.add(w.off); }
   g.userData.armR = armR; g.userData.armL = armL; g.userData.legs = [legL, legR];
-  return g;
+  return bakeGroup(g);
 }
 
 // ---------- 몬스터 ----------
@@ -431,7 +431,12 @@ function eyes(g, y, z, sep = 0.12, s = 0.06, c = EYE) {
   addPart(g, G.sph(s, 8, 6), c, [-sep, y, z], { outline: false });
   addPart(g, G.sph(s, 8, 6), c, [sep, y, z], { outline: false });
 }
+const monTpl = new Map();
 export function makeMonster(key, d) {
+  if (!monTpl.has(key)) monTpl.set(key, bakeGroup(buildMonster(key, d), null, true));
+  return instantiate(monTpl.get(key));
+}
+function buildMonster(key, d) {
   const g = group();
   const c = d.color;
   switch (key) {
@@ -469,8 +474,17 @@ export function makeMonster(key, d) {
       addPart(g, G.sph(0.26), key === 'shadow' ? 0x2b2740 : 0xb8c0c8, [0, 1.6, 0]);
       addPart(g, G.box(0.36, 0.06, 0.05), 0x1a1820, [0, 1.62, 0.24], { outline: false });
       if (key === 'shadow') eyes(g, 1.64, 0.25, 0.08, 0.04, 0xc59bff);
-      addPart(g, G.box(0.7, 0.9, 0.1), key === 'shadow' ? 0x5a4f7a : 0x8a6a4a, [-0.25, 1.0, 0.42]);
+      // 방패는 따로 움직인다(돌진 자세), 머리 위 느낌표는 돌진 전조
+      const sh = group(); sh.position.set(-0.25, 1.0, 0.42); g.add(sh);
+      addPart(sh, G.box(0.7, 0.9, 0.1), key === 'shadow' ? 0x5a4f7a : 0x8a6a4a, [0, 0, 0]);
+      addPart(sh, G.box(0.12, 0.6, 0.04), key === 'shadow' ? 0xc59bff : 0xd6c49a, [0, 0, 0.06], { outline: false });
       addPart(g, G.box(0.06, 0.9, 0.12), 0xd6dbe0, [0.42, 1.0, 0.3]);
+      const alert = new THREE.Group(); alert.position.set(0, 2.35, 0); alert.visible = false; g.add(alert);
+      const am = new THREE.MeshBasicMaterial({ color: 0xffd23a, depthTest: false }); am.userData.keep = true;
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.42, 0.14), am); bar.position.y = 0.18; bar.renderOrder = 11;
+      const dot = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.12, 0.14), am); dot.position.y = -0.14; dot.renderOrder = 11;
+      alert.add(bar, dot);
+      g.userData.shield = sh; g.userData.alert = alert;
       break;
     }
     case 'roller': {
@@ -577,28 +591,33 @@ export function makeBoss(key) {
 }
 
 // ---------- 효과 ----------
+// 여러 번 쓰는 도형은 하나만 만들어 같이 쓴다 (keep = 지우지 않음)
+const SH = {}; const shared = (k, mk) => SH[k] || (SH[k] = (g => (g.userData.keep = true, g))(mk()));
 export function telegraphCircle(r, color = PALETTE.danger) {
   const g = new THREE.Group();
-  const fill = new THREE.Mesh(new THREE.CircleGeometry(1, 32), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.25, depthWrite: false }));
-  const ring = new THREE.Mesh(new THREE.RingGeometry(0.93, 1, 40), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, depthWrite: false }));
+  const fill = new THREE.Mesh(shared('circ', () => new THREE.CircleGeometry(1, 32)), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.25, depthWrite: false }));
+  const ring = new THREE.Mesh(shared('ring93', () => new THREE.RingGeometry(0.93, 1, 40)), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, depthWrite: false }));
   fill.rotation.x = ring.rotation.x = -Math.PI / 2; g.add(fill, ring); g.scale.setScalar(r); g.position.y = 0.04;
   g.userData.fill = fill; return g;
 }
 export function telegraphLine(len, w, color = PALETTE.danger) {
   const m = new THREE.Mesh(new THREE.PlaneGeometry(w, len), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.35, depthWrite: false }));
-  m.rotation.x = -Math.PI / 2; m.geometry.translate(0, len / 2, 0);
+  m.rotation.x = -Math.PI / 2; m.geometry.translate(0, -len / 2, 0); // 그룹의 +z(rot 방향)로 뻗는다
   const g = new THREE.Group(); g.add(m); g.position.y = 0.05; return g;
 }
 export function orb(r, color, glow = true) {
-  const m = new THREE.Mesh(G.sph(r, 10, 8), new THREE.MeshBasicMaterial({ color }));
-  if (glow) { const h = new THREE.Mesh(G.sph(r * 1.8, 10, 8), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.3, depthWrite: false })); m.add(h); }
+  const unit = shared('sph1', () => G.sph(1, 10, 8));
+  const m = new THREE.Mesh(unit, new THREE.MeshBasicMaterial({ color })); m.scale.setScalar(r);
+  if (glow) { const h = new THREE.Mesh(unit, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.3, depthWrite: false })); h.scale.setScalar(1.8); m.add(h); }
   return m;
 }
+let arrowTpl = null;
 export function arrowMesh() {
-  const g = group();
-  addPart(g, G.cyl(0.02, 0.02, 0.8, 5), 0xc89a5a, [0, 0, 0], { rot: [Math.PI / 2, 0, 0], ow: 0.008 });
-  addPart(g, G.cone(0.05, 0.12, 4), 0xdfe5ea, [0, 0, 0.45], { rot: [Math.PI / 2, 0, 0], ow: 0.008 });
-  return g;
+  if (!arrowTpl) { const g = group();
+    addPart(g, G.cyl(0.02, 0.02, 0.8, 5), 0xc89a5a, [0, 0, 0], { rot: [Math.PI / 2, 0, 0], ow: 0.008 });
+    addPart(g, G.cone(0.05, 0.12, 4), 0xdfe5ea, [0, 0, 0.45], { rot: [Math.PI / 2, 0, 0], ow: 0.008 });
+    arrowTpl = bakeGroup(g, null, true); }
+  return instantiate(arrowTpl);
 }
 export function lootBeam(color) {
   const g = new THREE.Group();
@@ -622,25 +641,121 @@ export function makePortal() {
   g.add(ring, disc); g.position.y = 1.7; g.userData.disc = disc; return g;
 }
 export function ringPulse(r, color) {
-  const m = new THREE.Mesh(new THREE.RingGeometry(0.85, 1, 40), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }));
+  const m = new THREE.Mesh(shared('ring85', () => new THREE.RingGeometry(0.85, 1, 40)), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }));
   m.rotation.x = -Math.PI / 2; m.position.y = 0.08; m.scale.setScalar(r); return m;
 }
 export function cloud(r, color, op = 0.35) {
-  const m = new THREE.Mesh(G.sph(1, 14, 8), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: op, depthWrite: false }));
+  const m = new THREE.Mesh(shared('sph14', () => G.sph(1, 14, 8)), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: op, depthWrite: false }));
   m.scale.set(r, r * 0.35, r); return m;
 }
+const BAR_BG = new THREE.MeshBasicMaterial({ color: 0x2a2230, depthTest: false, transparent: true }), BAR_FG = new THREE.MeshBasicMaterial({ color: 0xe8736c, depthTest: false, transparent: true });
+BAR_BG.userData.keep = BAR_FG.userData.keep = true;
 export function hpBar() {
   const g = new THREE.Group();
-  const bg = new THREE.Mesh(new THREE.PlaneGeometry(1, 0.1), new THREE.MeshBasicMaterial({ color: 0x2a2230, depthTest: false, transparent: true }));
-  const fg = new THREE.Mesh(new THREE.PlaneGeometry(1, 0.1), new THREE.MeshBasicMaterial({ color: 0xe8736c, depthTest: false, transparent: true }));
-  fg.geometry.translate(0.5, 0, 0); fg.position.x = -0.5; fg.position.z = 0.001;
+  const bg = new THREE.Mesh(shared('barbg', () => new THREE.PlaneGeometry(1, 0.1)), BAR_BG);
+  const fg = new THREE.Mesh(shared('barfg', () => new THREE.PlaneGeometry(1, 0.1).translate(0.5, 0, 0)), BAR_FG);
+  fg.position.x = -0.5; fg.position.z = 0.001;
   bg.renderOrder = fg.renderOrder = 10; g.add(bg, fg); g.userData.fg = fg; g.visible = false;
   return g;
 }
-export function setOutlineColor(model, hex) { for (const m of model.userData.omats) m.color.setHex(hex); }
+export function setOutlineColor(model, hex) { for (const m of model.userData.omats) { if (m.vertexColors) { m.vertexColors = false; m.needsUpdate = true; } m.color.setHex(hex); } }
+const FLASH = new THREE.Color(0xffffff).multiplyScalar(0.6), TMP_C = new THREE.Color();
+// 같은 상태면 다시 계산하지 않는다
 export function flash(model, on) {
-  for (const m of model.userData.mats) { if (!m.userData.e0) m.userData.e0 = m.emissive.clone(); m.emissive.copy(on ? new THREE.Color(0xffffff).multiplyScalar(0.6) : m.userData.e0); }
+  const key = on ? 'f' : 'n'; if (model.userData.fk === key) return; model.userData.fk = key;
+  for (const m of model.userData.mats) { if (!m.userData.e0) m.userData.e0 = m.emissive.clone(); m.emissive.copy(on ? FLASH : m.userData.e0); }
 }
 export function tint(model, hex, k) {
-  for (const m of model.userData.mats) { if (!m.userData.e0) m.userData.e0 = m.emissive.clone(); m.emissive.copy(m.userData.e0).lerp(new THREE.Color(hex), k); }
+  const key = hex + ':' + Math.round(k * 20); if (model.userData.fk === key) return; model.userData.fk = key;
+  TMP_C.setHex(hex);
+  for (const m of model.userData.mats) { if (!m.userData.e0) m.userData.e0 = m.emissive.clone(); m.emissive.copy(m.userData.e0).lerp(TMP_C, k); }
+}
+// 화면에서 뺀 물체의 도형·재질을 그래픽 메모리에서 지운다 (같이 쓰는 것은 남긴다)
+export function dispose(obj) {
+  if (!obj) return;
+  obj.parent?.remove(obj);
+  obj.traverse(o => {
+    if (o.geometry && !o.geometry.userData.keep) o.geometry.dispose();
+    const ms = Array.isArray(o.material) ? o.material : o.material ? [o.material] : [];
+    for (const m of ms) if (!m.userData.keep) m.dispose();
+  });
+}
+
+// ---------- 묶어 그리기 (최적화) ----------
+// 같은 덩어리의 부품들을 정점 색으로 칠한 하나의 도형으로 합친다 → 그리는 횟수가 부품 수만큼 줄어든다
+const mergeable = (m, anyEm) => m && m.isMesh && !m.isInstancedMesh && !m.userData.isOutline && m.material.isMeshToonMaterial && !m.material.transparent && !m.material.map && !m.material.vertexColors && (anyEm || m.material.emissive.getHex() === 0) && m.visible;
+function mergeGeos(list, matOf) {
+  let n = 0; const parts = [];
+  for (const m of list) { const g = m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone(); g.applyMatrix4(matOf(m)); parts.push([g, m.material.color]); n += g.attributes.position.count; }
+  const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), col = new Float32Array(n * 3); let o = 0;
+  for (const [g, c] of parts) {
+    const k = g.attributes.position.count; pos.set(g.attributes.position.array, o * 3); nor.set(g.attributes.normal.array, o * 3);
+    for (let i = 0; i < k; i++) { col[(o + i) * 3] = c.r; col[(o + i) * 3 + 1] = c.g; col[(o + i) * 3 + 2] = c.b; }
+    o += k; g.dispose();
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  geo.computeBoundingSphere(); geo.userData.keep = true; return geo;
+}
+function mergedPair(body, line, matOf, emissive = 0) {
+  const out = [];
+  if (body.length) out.push(new THREE.Mesh(mergeGeos(body, matOf), toonMat(0xffffff, { vertexColors: true, emissive })));
+  if (line.length) { const ol = new THREE.Mesh(mergeGeos(line, matOf), new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide })); ol.userData.isOutline = true; out.push(ol); }
+  return out;
+}
+// 모델 안쪽 정리: 움직이는 부품(userData 로 가리키는 것)은 그대로 두고 나머지를 합친다
+export function bakeGroup(g, keep, tpl = false) {
+  if (!keep) { keep = new Set(); const walk = v => { if (Array.isArray(v)) v.forEach(walk); else if (v && v.isObject3D) keep.add(v); };
+    g.traverse(o => { for (const k in o.userData) if (k !== 'mats' && k !== 'omats' && k !== 'of' && k !== 'outline') walk(o.userData[k]); }); }
+  const body = [], line = [];
+  for (const c of [...g.children]) {
+    if (!c.isMesh) { bakeGroup(c, keep, tpl); continue; }
+    if (!keep.has(c) && mergeable(c)) body.push(c);
+  }
+  const bodySet = new Set(body);
+  for (const c of g.children) if (c.userData.isOutline && bodySet.has(c.userData.of)) line.push(c);
+  for (const c of [...body, ...line]) { c.updateMatrix(); g.remove(c); }
+  const merged = mergedPair(body, line, m => m.matrix);
+  for (let i = merged.length - 1; i >= 0; i--) { merged[i].parent = g; g.children.unshift(merged[i]); }
+  for (const c of [...body, ...line]) c.geometry.dispose();
+  if (tpl) g.traverse(o => { if (o.geometry) o.geometry.userData.keep = true; }); // 틀의 도형은 찍어낸 모델들이 같이 쓴다
+  return g;
+}
+// 원본(틀)에서 새 모델을 찍어낸다: 도형은 같이 쓰고 재질만 따로 (번쩍임·색 바꾸기는 개체마다)
+function instantiate(tpl) {
+  const map = new Map();
+  const copy = o => {
+    const n = o.isMesh ? new THREE.Mesh(o.geometry, o.material.userData.keep ? o.material : o.material.clone()) : new THREE.Group();
+    n.position.copy(o.position); n.quaternion.copy(o.quaternion); n.scale.copy(o.scale); n.visible = o.visible; n.renderOrder = o.renderOrder; map.set(o, n);
+    for (const c of o.children) n.add(copy(c)); return n;
+  };
+  const g = copy(tpl);
+  const mp = v => Array.isArray(v) ? v.map(mp) : (v && v.isObject3D ? map.get(v) : v);
+  for (const [o, n] of map) for (const k in o.userData) if (k !== 'mats' && k !== 'omats') n.userData[k] = mp(o.userData[k]);
+  g.userData.mats = []; g.userData.omats = []; g.userData.olines = [];
+  for (const n of map.values()) if (n.isMesh) {
+    if (n.userData.isOutline) { g.userData.omats.push(n.material); g.userData.olines.push(n); }
+    else if (n.material.emissive) g.userData.mats.push(n.material);
+  }
+  return g;
+}
+// 움직이지 않는 지형 소품을 구역(cell m)별로 합친다. 합칠 수 없는 부품은 그대로 옮겨 둔다
+export function bakeStatic(objs, cell = 40) {
+  const tmp = new THREE.Group(); for (const o of objs) tmp.add(o); tmp.updateMatrixWorld(true);
+  const out = new THREE.Group(), buckets = new Map(), keepers = [], wp = new THREE.Vector3();
+  tmp.traverse(m => {
+    if (!m.isMesh) return;
+    if (mergeable(m, true)) { m.getWorldPosition(wp); const em = m.material.emissive.getHex(), k = Math.floor(wp.x / cell) + ',' + Math.floor(wp.z / cell) + ',' + em; if (!buckets.has(k)) buckets.set(k, { body: [], line: [], em }); buckets.get(k).body.push(m); }
+    else if (!(m.userData.isOutline && mergeable(m.userData.of, true))) keepers.push(m);
+  });
+  for (const b of buckets.values()) { for (const m of b.body) if (m.userData.outline) b.line.push(m.userData.outline); out.add(...mergedPair(b.body, b.line, m => m.matrixWorld, b.em)); }
+  for (const m of keepers) out.attach(m);
+  tmp.traverse(m => { if (m.isMesh && m.parent !== out && m.geometry) m.geometry.dispose(); });
+  return out;
+}
+// 작은 조각 효과: 상자 하나를 수백 번 한 번에 그린다
+export function makeParticles(max) {
+  const m = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial(), max);
+  m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(max * 3), 3); m.count = 0; m.frustumCulled = false;
+  m.geometry.userData.keep = true; m.material.userData.keep = true; return m;
 }
