@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>바람의 초원 원정대 — 데모</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Jua&family=Gowun+Dodum&display=swap" rel="stylesheet">
+<style>
+  :root { --cream: #fff8ec; --ink: #3a3226; --ink2: #6b5d48; --gold: #f0b54a; --red: #e8736c; --panel: rgba(255, 248, 236, .93); }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #8ec5e8; font-family: 'Gowun Dodum', system-ui, sans-serif; color: var(--ink); user-select: none; -webkit-user-select: none; touch-action: none; }
+  canvas#game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  .hidden { display: none !important; }
+  button { font: inherit; color: var(--ink); background: #fff; border: 2px solid var(--ink); border-radius: 12px; padding: 8px 14px; cursor: pointer; box-shadow: 0 3px 0 var(--ink); }
+  button:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--ink); }
+  button:disabled { opacity: .45; cursor: default; }
+  button.primary { background: var(--gold); }
+  button.danger { background: #f6d2cc; margin-top: 18px; }
+  button.big { font-family: 'Jua'; font-size: 22px; padding: 12px 28px; }
+  button.small { font-size: 13px; padding: 5px 10px; border-radius: 9px; box-shadow: 0 2px 0 var(--ink); }
+  h2, h3 { font-family: 'Jua'; font-weight: normal; margin: 8px 0; }
+  .note, .help { color: var(--ink2); font-size: 14px; }
+  .help { margin-top: 14px; text-align: center; }
+
+  /* 패널 공통 */
+  .overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 12px; }
+  .panel { background: var(--panel); border: 3px solid var(--ink); border-radius: 22px; box-shadow: 0 6px 0 var(--ink); padding: 18px 20px; max-width: 980px; width: 100%; max-height: 94vh; overflow: auto; }
+
+  /* 마을 */
+  #town .panel { max-width: 1040px; }
+  .townhead { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .townhead h1 { font-family: 'Jua'; font-weight: normal; font-size: 30px; margin: 0; }
+  .townhead .sub { color: var(--ink2); }
+  #town-mats { margin-left: auto; font-family: 'Jua'; background: #fff; border: 2px solid var(--ink); border-radius: 999px; padding: 4px 14px; }
+  #town-tabs { display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap; }
+  #town-tabs button.on { background: var(--gold); }
+  .classgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .classcard { text-align: left; padding: 12px; border-radius: 16px; }
+  .classcard.on { background: #ffe7b0; outline: 3px solid var(--gold); }
+  .cname { font-family: 'Jua'; font-size: 22px; } .cname span { font-family: 'Gowun Dodum'; font-size: 13px; color: var(--ink2); margin-left: 6px; }
+  .clv { font-size: 14px; margin-top: 2px; }
+  .bar { height: 8px; background: #e9dfcc; border-radius: 99px; overflow: hidden; margin: 6px 0; border: 1px solid var(--ink); }
+  .bar i { display: block; height: 100%; background: #7ccf6a; }
+  .cskills { font-size: 13px; line-height: 1.6; color: var(--ink2); } .cskills b { color: var(--ink); }
+  .startrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; flex-wrap: wrap; }
+  .bosspick { font: inherit; padding: 8px; border-radius: 10px; border: 2px solid var(--ink); }
+  .slots { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .slot { background: #fff; border: 2px dashed #c9bba2; border-radius: 14px; padding: 8px; }
+  .slabel { font-size: 12px; color: var(--ink2); margin-bottom: 4px; }
+  .itemlist { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+  .itemlist.narrow { grid-template-columns: 1fr; max-height: 52vh; overflow: auto; padding-right: 6px; }
+  .iwrap { display: flex; flex-direction: column; gap: 6px; }
+  .iwrap.pick { cursor: pointer; } .iwrap.pick.on .item { outline: 3px solid var(--gold); }
+  .item { background: #fff; border: 2px solid var(--ink); border-left: 8px solid var(--rc); border-radius: 12px; padding: 8px 10px; font-size: 13px; }
+  .item.empty { border-left-color: #ddd; color: #aaa; }
+  .iname { font-family: 'Jua'; font-size: 16px; color: var(--ink); } .iname b { color: #c47a10; }
+  .islot { color: var(--ink2); font-size: 12px; } .istats { margin-top: 4px; line-height: 1.5; }
+  .iuniq { margin-top: 4px; color: #b86a00; font-weight: bold; } .where { font-size: 11px; color: var(--ink2); margin-top: 3px; }
+  .smith { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .smithpanel { display: flex; flex-direction: column; gap: 8px; }
+  .settings label { display: flex; align-items: center; gap: 10px; margin: 10px 0; }
+  .settings select { font: inherit; padding: 4px; }
+
+  /* 카드 */
+  #cards { background: rgba(40, 30, 20, .35); }
+  #cards .panel { text-align: center; background: transparent; border: none; box-shadow: none; }
+  #cards-title { color: #fff; text-shadow: 0 2px 0 var(--ink); font-size: 28px; }
+  #cards-row { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; margin: 14px 0; }
+  .card { position: relative; width: 200px; min-height: 250px; padding: 16px 14px; border-radius: 18px; border: 3px solid var(--ink); box-shadow: 0 6px 0 var(--ink), inset 0 0 0 4px var(--tc); background: var(--cream); text-align: left; display: flex; flex-direction: column; gap: 6px; }
+  .card.legend { background: linear-gradient(160deg, #fff4dc, #ffe2a8); }
+  .card:hover { transform: translateY(-4px); }
+  .ctier { font-family: 'Jua'; font-size: 18px; text-shadow: 0 1px 0 var(--ink), 0 -1px 0 var(--ink), 1px 0 0 var(--ink), -1px 0 0 var(--ink); }
+  .cfam { font-size: 12px; color: var(--ink2); } .ctitle { font-family: 'Jua'; font-size: 22px; } .cdesc { font-size: 15px; line-height: 1.5; }
+  .upg { margin-top: auto; font-size: 12px; background: #fff0c2; border-radius: 8px; padding: 4px 6px; }
+  .ckey { position: absolute; right: 10px; top: 8px; font-size: 12px; color: var(--ink2); }
+  body.touch .ckey { display: none; }
+
+  /* 결과·가방·일시정지 */
+  .rsum { font-size: 15px; margin: 4px 0 8px; } .rnote { color: var(--ink2); margin-bottom: 10px; }
+  #result { flex-direction: column; } #result > * { max-width: 980px; width: 100%; }
+  #result { background: var(--panel); overflow: auto; justify-content: flex-start; padding: 20px; }
+  #result > button { width: auto; align-self: center; margin-top: 14px; }
+  .bagcards { display: flex; flex-wrap: wrap; gap: 6px; } .bagcards span { border: 2px solid; border-radius: 8px; padding: 2px 8px; background: #fff; font-size: 13px; }
+  .bagtop { display: flex; justify-content: space-between; align-items: center; }
+  .itemlist > h3, .itemlist > .bagcards, .itemlist > .note { grid-column: 1 / -1; }
+
+  /* HUD */
+  #hud { position: fixed; inset: 0; pointer-events: none; }
+  .hide-on-aim { transition: opacity .15s; }
+  #hud.aiming .hide-on-aim, #touch.aiming .hide-on-aim:not(.held) { opacity: 0; }
+  #floorinfo { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); background: var(--panel); border: 2px solid var(--ink); border-radius: 999px; padding: 4px 16px; font-family: 'Jua'; }
+  #bossbar { position: absolute; top: 52px; left: 50%; transform: translateX(-50%); width: min(560px, 70vw); text-align: center; }
+  #bossname { font-family: 'Jua'; color: #fff; text-shadow: 0 2px 0 var(--ink); font-size: 20px; }
+  .bossbg { height: 16px; background: #3a3226; border: 2px solid var(--ink); border-radius: 99px; overflow: hidden; }
+  #bossfill { height: 100%; background: linear-gradient(#f08a7c, #d65a4e); transition: width .15s; }
+  #cardicons { position: absolute; top: 12px; left: 12px; display: flex; flex-wrap: wrap; gap: 4px; max-width: 40vw; }
+  #cardicons span { width: 30px; height: 30px; border-radius: 8px; border: 3px solid; background: var(--panel); font-size: 11px; display: flex; align-items: center; justify-content: center; font-family: 'Jua'; }
+  .bottom { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); display: flex; align-items: flex-end; gap: 12px; }
+  .vitals { width: min(380px, 50vw); }
+  .hpbar { position: relative; height: 22px; background: #3a3226; border: 2px solid var(--ink); border-radius: 99px; overflow: hidden; }
+  #hpfill { height: 100%; background: linear-gradient(#9be27f, #5fb04f); transition: width .1s; }
+  #hptext { position: absolute; inset: 0; text-align: center; color: #fff; font-family: 'Jua'; font-size: 14px; line-height: 19px; text-shadow: 0 1px 0 #000; }
+  #manabar { height: 8px; margin-top: 4px; background: #3a3226; border-radius: 99px; overflow: hidden; } #manafill { height: 100%; background: #7cb8ff; }
+  .xprow { display: flex; align-items: center; gap: 6px; margin-top: 4px; font-family: 'Jua'; font-size: 13px; color: #fff; text-shadow: 0 1px 0 var(--ink); }
+  .xprow .xpbar { flex: 1; height: 6px; background: rgba(58, 50, 38, .6); border-radius: 99px; overflow: hidden; } #xpfill { height: 100%; background: var(--gold); }
+  .skills { display: flex; gap: 8px; }
+  .cdbox { position: relative; width: 58px; height: 58px; border-radius: 14px; border: 2px solid var(--ink); background: var(--panel); display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 10px; text-align: center; line-height: 1.1; overflow: hidden; }
+  .cdbox b { font-family: 'Jua'; font-size: 16px; }
+  .cdbox::after { content: ''; position: absolute; inset: 0; background: conic-gradient(rgba(40, 30, 20, .6) calc(var(--cd, 0) * 360deg), transparent 0); }
+  body.touch .bottom .skills { display: none; }
+  #crosshair { position: absolute; left: 50%; top: 50%; width: 0; height: 0; }
+  #crosshair::before, #crosshair::after { content: ''; position: absolute; background: #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, .5); }
+  #crosshair::before { width: 4px; height: 4px; left: -2px; top: -2px; border-radius: 50%; }
+  #crosshair.ch-mage::before { width: 22px; height: 2px; left: -11px; top: -1px; border-radius: 0; } #crosshair.ch-mage::after { width: 2px; height: 22px; left: -1px; top: -11px; }
+  #crosshair.ch-cleric::after { width: 26px; height: 26px; left: -13px; top: -13px; background: none; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px rgba(0,0,0,.4); }
+  #chargering { position: absolute; left: 50%; top: 50%; width: 56px; height: 56px; margin: -28px; border-radius: 50%;
+    background: conic-gradient(#ffd24a calc(var(--p, 0) * 360deg), rgba(255, 255, 255, .25) 0);
+    -webkit-mask: radial-gradient(circle, transparent 22px, #000 23px); mask: radial-gradient(circle, transparent 22px, #000 23px); }
+  #chargering.full { background: #ff8a3a; }
+  #minihp { position: absolute; left: 50%; top: calc(50% + 40px); width: 80px; height: 5px; margin-left: -40px; background: rgba(0, 0, 0, .4); border-radius: 9px; overflow: hidden; opacity: 0; transition: opacity .15s; }
+  #minihp i { display: block; height: 100%; background: #9be27f; } #hud.aiming #minihp { opacity: 1; }
+  #target { position: absolute; }
+  #target i { position: absolute; width: 14px; height: 14px; border: 0 solid #fff; filter: drop-shadow(0 0 1px #000); }
+  #target i:nth-child(1) { left: 0; top: 0; border-width: 3px 0 0 3px; } #target i:nth-child(2) { right: 0; top: 0; border-width: 3px 3px 0 0; }
+  #target i:nth-child(3) { left: 0; bottom: 0; border-width: 0 0 3px 3px; } #target i:nth-child(4) { right: 0; bottom: 0; border-width: 0 3px 3px 0; }
+  #weak { position: absolute; width: 14px; height: 14px; margin: -7px; background: #e8433a; border: 2px solid #fff; transform: rotate(45deg); }
+  #prompt { position: absolute; left: 50%; top: 62%; transform: translateX(-50%); background: var(--panel); border: 2px solid var(--ink); border-radius: 12px; padding: 6px 14px; }
+  #prompt b { background: var(--ink); color: #fff; border-radius: 6px; padding: 0 6px; margin-right: 4px; }
+  #banner { position: absolute; top: 24%; left: 50%; transform: translate(-50%, -10px); font-family: 'Jua'; font-size: 34px; color: #fff; text-shadow: 0 3px 0 var(--ink), 0 0 12px rgba(0,0,0,.25); opacity: 0; transition: opacity .3s, transform .3s; white-space: nowrap; }
+  #banner.show { opacity: 1; transform: translate(-50%, 0); }
+  #toasts { position: absolute; right: 14px; top: 60px; display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+  .toast { background: var(--panel); border: 2px solid var(--ink); border-radius: 10px; padding: 5px 12px; font-size: 14px; animation: tin .2s; }
+  @keyframes tin { from { transform: translateX(20px); opacity: 0; } }
+  #dmg { position: absolute; inset: 0; overflow: hidden; }
+  .dnum { position: absolute; font-family: 'Jua'; font-size: 18px; text-shadow: 0 2px 0 var(--ink); animation: dup .7s forwards; transform: translateX(-50%); }
+  .dnum.big { font-size: 26px; }
+  @keyframes dup { to { transform: translate(-50%, -40px); opacity: 0; } }
+  #lowhp { position: absolute; inset: 0; box-shadow: inset 0 0 90px 30px rgba(220, 40, 30, .55); opacity: 0; transition: opacity .3s; }
+  #lowhp.on { opacity: 1; animation: pulse 1s infinite; } @keyframes pulse { 50% { opacity: .55; } }
+  #hurtflash { position: absolute; inset: 0; background: rgba(230, 60, 40, .25); opacity: 0; }
+  #hurtflash.on { animation: hf .25s; } @keyframes hf { from { opacity: 1; } to { opacity: 0; } }
+  #sporeblur { position: absolute; inset: 0; backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); background: rgba(150, 200, 80, .18); opacity: 0; transition: opacity .3s; }
+  #sporeblur.on { opacity: 1; }
+
+  /* 모바일 조작 */
+  #touch { position: fixed; inset: 0; }
+  #joy-base { position: absolute; width: 120px; height: 120px; margin: -60px; border-radius: 50%; border: 3px solid rgba(255, 255, 255, .7); background: rgba(58, 50, 38, .18); pointer-events: none; }
+  #joy-knob { position: absolute; left: 50%; top: 50%; width: 54px; height: 54px; margin: -27px; border-radius: 50%; background: rgba(255, 248, 236, .9); border: 2px solid var(--ink); }
+  .tbtn { position: absolute; border-radius: 50%; border: 3px solid var(--ink); background: var(--panel); box-shadow: 0 4px 0 var(--ink); display: flex; align-items: center; justify-content: center; font-family: 'Jua'; font-size: 13px; text-align: center; padding: 0; overflow: hidden; }
+  .tbtn.held { background: #ffe7b0; }
+  .tbtn[data-k=atk] { width: 96px; height: 96px; right: max(24px, env(safe-area-inset-right)); bottom: 28px; font-size: 18px; }
+  .tbtn[data-k=aux] { width: 64px; height: 64px; right: calc(max(24px, env(safe-area-inset-right)) + 18px); bottom: 140px; }
+  .tbtn[data-k=skill] { width: 64px; height: 64px; right: calc(max(24px, env(safe-area-inset-right)) + 112px); bottom: 34px; }
+  .tbtn[data-k=dash] { width: 54px; height: 54px; right: calc(max(24px, env(safe-area-inset-right)) + 104px); bottom: 118px; }
+  .tbtn[data-k=jump] { width: 54px; height: 54px; right: calc(max(24px, env(safe-area-inset-right)) + 184px); bottom: 70px; }
+  .tbtn[data-k=use] { width: 70px; height: 44px; border-radius: 12px; left: 50%; bottom: 120px; transform: translateX(-50%); }
+  .tbtn[data-k=bag] { width: 44px; height: 44px; border-radius: 12px; right: 70px; top: 12px; font-size: 11px; }
+  .tbtn[data-k=pause] { width: 44px; height: 44px; border-radius: 12px; right: 16px; top: 12px; }
+  .tbtn.cdbox { border-radius: 50%; }
+  body.touch #prompt { top: 54%; }
+  #rotate { display: none; position: fixed; inset: 0; background: var(--cream); z-index: 50; align-items: center; justify-content: center; font-family: 'Jua'; font-size: 24px; text-align: center; padding: 20px; }
+  @media (orientation: portrait) { body.touch #rotate { display: flex; } }
+  @media (max-width: 760px) { .classgrid { grid-template-columns: repeat(2, 1fr); } .smith { grid-template-columns: 1fr; } .slots { grid-template-columns: 1fr; } .card { width: 44vw; min-height: 0; } }
+  @media (max-height: 500px) { .panel { padding: 10px 14px; } .classcard .cskills { display: none; } .card { min-height: 0; padding: 10px; } .ctitle { font-size: 18px; } .cdesc { font-size: 13px; } #cards-title { font-size: 20px; } }
+</style>
+<script type="importmap">{ "imports": { "three": "./lib/three.module.min.js" } }</script>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="hud" class="hidden">
+  <div id="cardicons" class="hide-on-aim"></div>
+  <div id="floorinfo" class="hide-on-aim"></div>
+  <div id="bossbar" class="hidden"><div id="bossname"></div><div class="bossbg"><div id="bossfill"></div></div></div>
+  <div id="crosshair"></div>
+  <div id="chargering" class="hidden"></div>
+  <div id="target" class="hidden"><i></i><i></i><i></i><i></i></div>
+  <div id="weak" class="hidden"></div>
+  <div id="minihp"><i></i></div>
+  <div class="bottom hide-on-aim">
+    <div class="vitals">
+      <div class="hpbar"><div id="hpfill"></div><div id="hptext"></div></div>
+      <div id="manabar" class="hidden"><div id="manafill"></div></div>
+      <div class="xprow"><span id="lvtext"></span><div class="xpbar"><div id="xpfill"></div></div></div>
+    </div>
+    <div class="skills">
+      <div class="cdbox" data-cd="rmb"><b>우</b><span data-lbl="rmb"></span></div>
+      <div class="cdbox" data-cd="q"><b>Q</b><span data-lbl="q"></span></div>
+      <div class="cdbox" data-cd="dash"><b>Shift</b>대시</div>
+    </div>
+  </div>
+  <div id="prompt" class="hidden"></div>
+  <div id="banner"></div>
+  <div id="toasts"></div>
+  <div id="dmg"></div>
+  <div id="sporeblur"></div>
+  <div id="lowhp"></div>
+  <div id="hurtflash"></div>
+</div>
+
+<div id="touch" class="hidden">
+  <div id="joy-base" class="hidden"><div id="joy-knob"></div></div>
+  <button class="tbtn hide-on-aim" data-k="atk">공격</button>
+  <button class="tbtn hide-on-aim cdbox" data-k="aux" data-cd="rmb"><span data-lbl="rmb"></span></button>
+  <button class="tbtn hide-on-aim cdbox" data-k="skill" data-cd="q"><span data-lbl="q"></span></button>
+  <button class="tbtn hide-on-aim cdbox" data-k="dash" data-cd="dash">대시</button>
+  <button class="tbtn hide-on-aim" data-k="jump">점프</button>
+  <button class="tbtn hidden" data-k="use" id="btn-use">줍기</button>
+  <button class="tbtn hide-on-aim" data-k="bag">가방</button>
+  <button class="tbtn hide-on-aim" data-k="pause">Ⅱ</button>
+</div>
+
+<div id="town" class="overlay hidden">
+  <div class="panel">
+    <div class="townhead"><h1>바람의 초원 원정대</h1><span class="sub">데모 · 풍차 마을</span><span id="town-mats"></span></div>
+    <div id="town-tabs">
+      <button data-tab="expedition">원정 출발</button><button data-tab="gear">장비·창고</button><button data-tab="smith">대장간</button><button data-tab="settings">설정</button>
+    </div>
+    <div id="town-body"></div>
+  </div>
+</div>
+
+<div id="cards" class="overlay hidden">
+  <div class="panel"><h2 id="cards-title"></h2><div id="cards-row"></div><button id="cards-reroll"></button></div>
+</div>
+
+<div id="result" class="overlay hidden"></div>
+
+<div id="bag" class="overlay hidden">
+  <div class="panel"><div class="bagtop"><h2 id="bag-title"></h2><button id="bag-close">닫기</button></div>
+    <p class="note">이번 판에만 착용한다. 판을 성공하면 창고로 들어간다.</p><div id="bag-list" class="itemlist"></div></div>
+</div>
+
+<div id="pause" class="overlay hidden">
+  <div class="panel" style="max-width:360px;text-align:center">
+    <h2>일시정지</h2>
+    <p class="note">감도와 그래픽은 마을의 설정에서 바꾼다.</p>
+    <p><button id="pause-resume" class="primary big">계속하기</button></p>
+    <p><button id="pause-quit">포기하고 마을로 (실패 처리)</button></p>
+  </div>
+</div>
+
+<div id="rotate">화면을 가로로 돌려주세요</div>
+
+<script type="module" src="./js/game.js"></script>
+</body>
+</html>
